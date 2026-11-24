@@ -30,9 +30,17 @@ class _Job(QRunnable):
         except Exception as error:  # noqa: BLE001 - every failure goes back to the UI
             if not hasattr(error, "status"):
                 traceback.print_exc()
-            self.signals.failed.emit(error)
+            self._emit(self.signals.failed, error)
         else:
-            self.signals.done.emit(result)
+            self._emit(self.signals.done, result)
+
+    @staticmethod
+    def _emit(signal, value) -> None:
+        # The app (or the window that asked) may be gone by the time the call returns.
+        try:
+            signal.emit(value)
+        except RuntimeError:
+            pass
 
 
 def run(fn: Callable[[], Any], on_done: Callable[[Any], None] | None = None,

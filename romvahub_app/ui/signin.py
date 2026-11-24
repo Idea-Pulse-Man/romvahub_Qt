@@ -18,9 +18,11 @@ class SignInWindow(QWidget):
     """Emits `connected(api)` once signed in (account) or once tokens are added (token mode)."""
 
     connected = Signal(object)
+    cancelled = Signal()  # closed with ✕ before connecting
 
     def __init__(self, message: str = ""):
         super().__init__()
+        self._finished = False
         self.setWindowTitle("romva hub — Connect")
         self.setWindowIcon(app_icon())
         self.setObjectName("Page")
@@ -155,6 +157,14 @@ class SignInWindow(QWidget):
         return page
 
     # ------------------------------------------------------------------ helpers
+    def _finish(self) -> None:
+        self._finished = True
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if not self._finished:
+            self.cancelled.emit()
+        super().closeEvent(event)
+
     def _show_server(self) -> None:
         self.server_label.setText(f"Server: {config.server_url.replace('https://', '')}")
 
@@ -224,6 +234,7 @@ class SignInWindow(QWidget):
         self._busy(self.sign_in_btn, False, "Sign in")
         self._busy(self.verify_btn, False, "Verify")
         self.password.clear()
+        self._finish()
         self.connected.emit(self._api)
 
     # ------------------------------------------------------------------ tokens
@@ -295,4 +306,5 @@ class SignInWindow(QWidget):
             entries.append(tp.to_entry())
         config.set_token_entries(config.server_url, entries)
         config.method = "token"
+        self._finish()
         self.connected.emit(api)

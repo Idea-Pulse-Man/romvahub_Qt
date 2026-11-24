@@ -64,15 +64,18 @@ class Controller:
     def show_signin(self, message: str = "") -> None:
         self.signin = SignInWindow(message)
         self.signin.connected.connect(self._connected)
+        # Closing the sign-in window (✕) without connecting quits the app.
+        self.signin.cancelled.connect(self.app.quit)
         self.signin.show()
 
     def _connected(self, api: Api) -> None:
-        if self.signin:
-            self.signin.close()
-            self.signin.deleteLater()
-            self.signin = None
         self.minimized = False
+        # The main window first: the app must never be left with no window open.
         self.open_main(api)
+        if self.signin:
+            signin, self.signin = self.signin, None
+            signin.close()
+            signin.deleteLater()
 
     def open_main(self, api: Api) -> None:
         self.api = api
@@ -173,7 +176,6 @@ class Controller:
 
 def _start_debug_log() -> None:
     """--debug: every server call, every error and the Resume Maker's log, on the console and in a file."""
-    import faulthandler
     import logging
     import traceback
 
@@ -190,7 +192,8 @@ def _start_debug_log() -> None:
         root.addHandler(handler)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    faulthandler.enable()
+    logging.getLogger("keyring").setLevel(logging.INFO)
+    logging.getLogger("win32ctypes").setLevel(logging.INFO)
     log = logging.getLogger("romvahub")
 
     def excepthook(kind, value, tb):
@@ -236,6 +239,6 @@ def main() -> int:
     except Exception as error:  # noqa: BLE001 - last resort, shown to the user
         QMessageBox.critical(None, APP_NAME, f"romva hub could not start:\n{error}")
         return 1
-    # Quit when nothing is left open (no main window behind the tray).
-    app.lastWindowClosed.connect(lambda: None if controller.window else app.quit())
+    # Quitting is explicit: tray → Quit, or ✕ on the sign-in window. Windows that
+    # close while switching (sign-in ↔ main window) never end the app.
     return app.exec()
