@@ -11,6 +11,7 @@ This app starts and stops it, hands it the sign-in, and reads its log:
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import socket
@@ -23,6 +24,7 @@ from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signa
 from . import tasks
 from .config import config, data_dir
 
+_log = logging.getLogger("romvahub.maker")
 LINE = re.compile(r"^(\S+)\s+(INFO|WARN|ERROR)\s+(.*)$")
 MAKING = re.compile(r"^Making #(\S+) (.+?) — (.+)$")
 MAKING_LETTER = re.compile(r"^Making the cover letter for #(\S+) (.+?) — (.+)$")
@@ -252,6 +254,7 @@ class Maker(QObject):
 
     def _emit_line(self, level: str, text: str) -> None:
         stamp = datetime.now().strftime("%H:%M:%S")
+        _log.log({"WARN": logging.WARNING, "ERROR": logging.ERROR}.get(level, logging.INFO), "%s", text)
         self.lines.append((stamp, level, text))
         del self.lines[:-500]
         self.line.emit(stamp, level, text)

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ from . import APP_NAME, APP_VERSION, vault
 from .config import config
 
 REFRESH_COOKIE = "ge_refresh"
+_log = logging.getLogger("romvahub.api")
 
 
 class ApiError(Exception):
@@ -172,16 +174,25 @@ class Api:
             headers["Authorization"] = f"Bearer {bearer}"
         if cookies:
             headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in cookies.items())
+        started = time.monotonic()
         try:
             response = self._http.request(
                 method, path, params=params, json=json_body, headers=headers,
                 timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT,
             )
         except httpx.HTTPError as error:
+            _log.warning("%s %s -> no answer (%s)", method, path, error)
             raise ApiError(0, f"Could not reach {self.session.server}: {error}") from error
         finally:
             # The server also sets cookies for the website; this app uses headers only.
             self._http.cookies.clear()
+        # Debug log: method, path, query, status and time. Never the tokens or bodies.
+        ms = int((time.monotonic() - started) * 1000)
+        level = logging.WARNING if response.status_code >= 400 else logging.DEBUG
+        if _log.isEnabledFor(level):
+            query = f"?{httpx.QueryParams(params)}" if params else ""
+            detail = f"  {_error_message(response)}" if response.status_code >= 400 else ""
+            _log.log(level, "%s %s%s -> %s (%d ms)%s", method, path, query, response.status_code, ms, detail)
         return response
 
     def _bearer(self, profile_id: str | None) -> str:

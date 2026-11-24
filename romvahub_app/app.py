@@ -171,6 +171,42 @@ class Controller:
             self.signin.activateWindow()
 
 
+def _start_debug_log() -> None:
+    """--debug: every server call, every error and the Resume Maker's log, on the console and in a file."""
+    import faulthandler
+    import logging
+    import traceback
+
+    from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+
+    from .config import data_dir
+
+    path = data_dir() / "debug.log"
+    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%H:%M:%S")
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    for handler in (logging.StreamHandler(sys.stdout), logging.FileHandler(path, encoding="utf-8")):
+        handler.setFormatter(fmt)
+        root.addHandler(handler)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    faulthandler.enable()
+    log = logging.getLogger("romvahub")
+
+    def excepthook(kind, value, tb):
+        log.error("UNCAUGHT ERROR:\n%s", "".join(traceback.format_exception(kind, value, tb)))
+        try:
+            QMessageBox.critical(None, f"{APP_NAME} (debug)", f"{kind.__name__}: {value}\n\nDetails: {path}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    sys.excepthook = excepthook
+    qt_levels = {QtMsgType.QtWarningMsg: logging.WARNING, QtMsgType.QtCriticalMsg: logging.ERROR,
+                 QtMsgType.QtFatalMsg: logging.CRITICAL}
+    qInstallMessageHandler(lambda kind, _ctx, msg: logging.getLogger("qt").log(qt_levels.get(kind, logging.DEBUG), msg))
+    log.info("romva hub debug mode. Server: %s. Log file: %s", config.server_url, path)
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
@@ -191,6 +227,8 @@ def main() -> int:
     QLocalServer.removeServer(APP_ID)
     server.listen(APP_ID)
 
+    if "--debug" in sys.argv:
+        _start_debug_log()
     controller = Controller(app, minimized="--minimized" in sys.argv)
     server.newConnection.connect(lambda: (server.nextPendingConnection(), controller.show_existing()))
     try:
