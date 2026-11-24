@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QAction, QCloseEvent, QFontMetrics
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMenu, QPushButton, QStackedWidget,
-    QSystemTrayIcon, QVBoxLayout, QWidget,
+    QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu, QPushButton,
+    QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
-from .. import APP_VERSION, chrome
+from .. import APP_VERSION, chrome, theme
 from ..config import config
 from ..maker import Maker
 from ..state import ALL, AppState
@@ -18,10 +18,11 @@ from .home import HomePage
 from .profiles import ProfilesPage
 from .resume_maker import ResumeMakerPage
 from .settings import SettingsPage
-from .widgets import Banner, Dot, app_icon, button, label
+from .icons import icon, pixmap
+from .widgets import Banner, Dot, app_icon, button, icon_button, label
 
-ADMIN_LINKS = [("Users", "/users"), ("Tokens", "/tokens"), ("AI settings", "/ai-settings"), ("Pipeline", "/pipeline"),
-               ("Calendar", "/calendar")]
+ADMIN_LINKS = [("Users", "/users", "users"), ("Tokens", "/tokens", "key"), ("AI settings", "/ai-settings", "sparkles"),
+               ("Pipeline", "/pipeline", "kanban"), ("Calendar", "/calendar", "calendar")]
 
 
 class MainWindow(QMainWindow):
@@ -82,18 +83,19 @@ class MainWindow(QMainWindow):
         maker.made.connect(self._made)
 
         self._tray()
-        self._show_maker()
+        self.restyle()
         self.go("applications")
 
     # ------------------------------------------------------------------ chrome
     def _sidebar(self) -> QWidget:
         side = QFrame()
         side.setObjectName("Sidebar")
-        side.setFixedWidth(230)
+        side.setFixedWidth(232)
         lay = QVBoxLayout(side)
         lay.setContentsMargins(12, 16, 12, 14)
-        lay.setSpacing(4)
+        lay.setSpacing(3)
         brand = QHBoxLayout()
+        brand.setSpacing(10)
         mark = label("r", "BrandMark")
         mark.setFixedSize(34, 34)
         mark.setAlignment(Qt.AlignCenter)
@@ -101,67 +103,159 @@ class MainWindow(QMainWindow):
         names = QVBoxLayout()
         names.setSpacing(0)
         names.addWidget(label("romva hub", "Brand"))
-        names.addWidget(label(self.state.session.role_label if self.state.session.mode == "account" else "Bidder · tokens", "Muted"))
+        role = self.state.session.role_label if self.state.session.mode == "account" else "Bidder · tokens"
+        names.addWidget(label(role, "Faint"))
         brand.addLayout(names, 1)
         lay.addLayout(brand)
-        lay.addSpacing(14)
+        lay.addSpacing(16)
 
         self.nav = QButtonGroup(self)
         self.nav.setExclusive(True)
         self.nav_buttons: dict[str, QPushButton] = {}
-        for key, text in (("home", "⌂   Home"), ("applications", "☰   Applications"), ("maker", "✦   Resume Maker"),
-                          ("profiles", "◉   Profiles"), ("settings", "⚙   Settings")):
-            btn = button(text, "NavButton", lambda _=False, k=key: self.go(k))
+        self.nav_icons: dict[str, str] = {}
+        for key, text, icon_name in (("home", "Home", "home"), ("applications", "Applications", "list"),
+                                     ("maker", "Resume Maker", "sparkles"), ("profiles", "Profiles", "user"),
+                                     ("settings", "Settings", "sliders")):
+            btn = button(f"  {text}", "NavButton", lambda _=False, k=key: self.go(k))
             btn.setCheckable(True)
+            btn.setIconSize(QSize(18, 18))
+            btn.toggled.connect(lambda _on: self._paint_nav())
             self.nav.addButton(btn)
             self.nav_buttons[key] = btn
+            self.nav_icons[key] = icon_name
             lay.addWidget(btn)
 
+        self.admin_buttons: list[tuple[QPushButton, str]] = []
         if self.state.session.is_admin:
             lay.addWidget(label("ADMIN", "NavSection"))
-            for text, path in ADMIN_LINKS:
-                lay.addWidget(button(f"↗   {text}", "NavButton",
-                                     lambda _=False, p=path: chrome.open_url(self.state.session.server + p),
-                                     "Opens in the website (admin pages move into the app later)"))
+            for text, path, icon_name in ADMIN_LINKS:
+                btn = button(f"  {text}", "NavButton", lambda _=False, p=path: chrome.open_url(self.state.session.server + p),
+                             "Opens on the website (admin pages move into the app later)")
+                btn.setIconSize(QSize(18, 18))
+                self.admin_buttons.append((btn, icon_name))
+                lay.addWidget(btn)
 
         lay.addStretch(1)
         conn = QFrame()
-        conn.setObjectName("Card")
+        conn.setObjectName("ConnCard")
         cl = QVBoxLayout(conn)
         cl.setContentsMargins(12, 10, 12, 10)
-        cl.setSpacing(2)
-        cl.addWidget(label("Connected to", "Muted"))
+        cl.setSpacing(3)
+        cl.addWidget(label("Connected to", "Faint"))
         row = QHBoxLayout()
-        self.conn_dot = Dot("#22C55E")
+        row.setSpacing(8)
+        self.conn_dot = Dot("#22C55E", 8)
         row.addWidget(self.conn_dot)
-        row.addWidget(label(self.state.session.server.replace("https://", "").replace("http://", ""), ""), 1)
+        row.addWidget(label(self.state.session.server.replace("https://", "").replace("http://", ""), "Strong"), 1)
         cl.addLayout(row)
-        cl.addWidget(label(f"Version {APP_VERSION}", "Muted"))
+        cl.addWidget(label(f"Version {APP_VERSION}", "Faint"))
         lay.addWidget(conn)
         return side
+
+    def _paint_nav(self) -> None:
+        c = theme.colors()
+        for key, btn in self.nav_buttons.items():
+            btn.setIcon(icon(self.nav_icons[key], c["accent"] if btn.isChecked() else c["text"], 18))
+        for btn, icon_name in self.admin_buttons:
+            btn.setIcon(icon(icon_name, c["text"], 18))
 
     def _topbar(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("TopBar")
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(20, 10, 20, 10)
+        lay.setSpacing(12)
+
         self.profile_btn = QPushButton()
         self.profile_btn.setCursor(Qt.PointingHandCursor)
+        self.profile_btn.setMinimumHeight(40)
+        self.profile_btn.setToolTip("Choose the Profile")
+        pl = QHBoxLayout(self.profile_btn)
+        pl.setContentsMargins(14, 0, 10, 0)
+        pl.setSpacing(8)
+        self.profile_caption = label("Profile", "Faint")
+        self.profile_name = label("", "Strong")
+        self.profile_chevron = QLabel()
+        for widget in (self.profile_caption, self.profile_name, self.profile_chevron):
+            widget.setAttribute(Qt.WA_TransparentForMouseEvents)
+            pl.addWidget(widget)
         self.profile_menu = QMenu(self)
         self.profile_btn.setMenu(self.profile_menu)
         lay.addWidget(self.profile_btn)
-        lay.addStretch(1)
-        self.online = label("● Online", "Ok")
+
+        search_box = QWidget()
+        sl = QHBoxLayout(search_box)
+        sl.setContentsMargins(0, 0, 0, 0)
+        self.search = QLineEdit()
+        self.search.setObjectName("TopSearch")
+        self.search.setPlaceholderText("Search company or role")
+        self.search.setClearButtonEnabled(True)
+        self.search.setMinimumHeight(40)
+        self.search.textChanged.connect(self._search)
+        sl.addWidget(self.search)
+        self.search_icon = QLabel(self.search)
+        self.search_icon.move(12, 12)
+        self.search_icon.setAttribute(Qt.WA_TransparentForMouseEvents)
+        lay.addWidget(search_box, 1)
+
+        self.online = QLabel("●  Online")
+        self.online.setObjectName("OnlinePill")
         lay.addWidget(self.online)
+        self.theme_btn = icon_button("moon", "Switch to dark theme", self._toggle_theme)
+        self.theme_btn.setObjectName("Ghost")
+        self.theme_btn.setFixedSize(38, 38)
+        lay.addWidget(self.theme_btn)
+
         who = self.state.session
-        user_btn = QPushButton(f"{who.display_name}  ·  {who.role_label}" if who.mode == "account" else "Token mode")
+        name = who.display_name if who.mode == "account" else "Token mode"
+        self.user_btn = QPushButton()
+        self.user_btn.setCursor(Qt.PointingHandCursor)
+        self.user_btn.setMinimumHeight(40)
+        ul = QHBoxLayout(self.user_btn)
+        ul.setContentsMargins(8, 0, 10, 0)
+        ul.setSpacing(8)
+        avatar = QLabel("".join(part[:1] for part in name.replace(".", " ").split()[:2]).upper() or "R")
+        avatar.setObjectName("Avatar")
+        avatar.setFixedSize(26, 26)
+        avatar.setAlignment(Qt.AlignCenter)
+        user_name = label(name, "Strong")
+        self.user_chevron = QLabel()
+        for widget in (avatar, user_name, self.user_chevron):
+            widget.setAttribute(Qt.WA_TransparentForMouseEvents)
+            ul.addWidget(widget)
+        self.user_btn.setMinimumWidth(QFontMetrics(self.user_btn.font()).horizontalAdvance(name) + 90)
         menu = QMenu(self)
-        menu.addAction("Settings", lambda: self.go("settings"))
+        menu.addAction(f"{who.role_label}" if who.mode == "account" else "Connected with tokens").setEnabled(False)
         menu.addSeparator()
+        menu.addAction("Settings", lambda: self.go("settings"))
         menu.addAction("Sign out" if who.mode == "account" else "Disconnect", self.sign_out.emit)
-        user_btn.setMenu(menu)
-        lay.addWidget(user_btn)
+        self.user_btn.setMenu(menu)
+        lay.addWidget(self.user_btn)
         return bar
+
+    def _search(self, text: str) -> None:
+        if self.stack.currentWidget() is not self.applications:
+            self.go("applications")
+        self.applications.set_search(text)
+
+    def _toggle_theme(self) -> None:
+        current = theme.colors()["name"]
+        choice = "light" if current == "dark" else "dark"
+        config.theme = choice
+        self.theme_changed.emit(choice)
+
+    def restyle(self) -> None:
+        """Icons and colours that are not in the style sheet (after a theme change)."""
+        c = theme.colors()
+        dark = c["name"] == "dark"
+        self.theme_btn.setIcon(icon("sun" if dark else "moon", c["text"], 18))
+        self.theme_btn.setToolTip("Switch to light theme" if dark else "Switch to dark theme")
+        self.search_icon.setPixmap(pixmap("search", c["faint"], 16, 2.0))
+        self.user_chevron.setPixmap(pixmap("chevron", c["muted"], 14, 2.2))
+        self.profile_chevron.setPixmap(pixmap("chevron", c["muted"], 14, 2.2))
+        self._paint_nav()
+        self._online(self.state.online)
+        self._show_maker()
 
     def _statusbar(self) -> QWidget:
         bar = QFrame()
@@ -226,7 +320,10 @@ class MainWindow(QMainWindow):
         self._show_profile()
 
     def _show_profile(self) -> None:
-        self.profile_btn.setText(f"Profile:  {self.state.profile_name}   ")
+        name = self.state.profile_name
+        self.profile_name.setText(name)
+        fm = QFontMetrics(self.profile_name.font())
+        self.profile_btn.setFixedWidth(fm.horizontalAdvance(name) + fm.horizontalAdvance("Profile") + 74)
         if self.profile_menu.actions():
             self._refresh_checks()
 
@@ -240,8 +337,8 @@ class MainWindow(QMainWindow):
                 action.setText(("✓  " if mark else "     ") + name)
 
     def _online(self, online: bool) -> None:
-        self.online.setText("● Online" if online else "● Offline")
-        self.online.setObjectName("Ok" if online else "Error")
+        self.online.setText("●  Online" if online else "●  Offline")
+        self.online.setObjectName("OnlinePill" if online else "OfflinePill")
         self.online.style().unpolish(self.online)
         self.online.style().polish(self.online)
         self.conn_dot.set_color("#22C55E" if online else "#DC2626")
@@ -257,8 +354,10 @@ class MainWindow(QMainWindow):
                                     else f"Waiting for the next Draft · {self.maker.ai_name()}")
         else:
             self.maker_note.setText("Start it to make resumes for your Drafts.")
-        self.maker_btn.setText("■ Stop" if running else "▶ Start")
+        self.maker_btn.setText("Stop" if running else "Start")
         self.maker_btn.setObjectName("" if running else "Primary")
+        c = theme.colors()
+        self.maker_btn.setIcon(icon("stop" if running else "play", c["text"] if running else c["accent_fg"], 12))
         self.maker_btn.style().unpolish(self.maker_btn)
         self.maker_btn.style().polish(self.maker_btn)
         self.tray_maker.setText("Stop Resume Maker" if running else "Start Resume Maker")

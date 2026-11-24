@@ -162,6 +162,9 @@ class Controller:
 
     def set_theme(self, choice: str) -> None:
         theme.apply(self.app, choice)
+        if self.window:
+            self.window.restyle()
+            self.window.applications._render()
         if self.state:
             self.state.data_changed.emit()
 

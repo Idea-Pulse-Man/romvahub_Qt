@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
@@ -61,24 +61,137 @@ class Card(QFrame):
 
 
 class Chip(QPushButton):
-    """A rounded status label. Clickable when it opens a menu."""
+    """A rounded status pill (painted, so it looks the same in every theme). Clickable: a ⌄ after the text."""
 
     def __init__(self, text: str, kind: str, clickable: bool = False, parent: QWidget | None = None):
         super().__init__(parent)
-        self.kind = kind
+        self.setFlat(True)
         self.set(text, kind, clickable)
 
     def set(self, text: str, kind: str, clickable: bool) -> None:
-        self.kind = kind
-        bg, fg = theme.chip_colors(kind)
-        self.setText(f"{text}  ▾" if clickable else text)
+        self.kind, self.label, self.clickable = kind, text, clickable
         self.setCursor(Qt.PointingHandCursor if clickable else Qt.ArrowCursor)
-        self.setFlat(True)
-        self.setStyleSheet(
-            f"QPushButton {{ background: {bg}; color: {fg}; border: none; border-radius: 11px; padding: 3px 10px;"
-            f" font-size: 8.5pt; font-weight: 600; }} QPushButton:hover {{ background: {bg}; }}"
-        )
+        font = QFont(self.font())
+        font.setPointSizeF(8.5)
+        font.setBold(True)
+        self._font = font
+        width = QFontMetrics(font).horizontalAdvance(text) + 22 + (16 if clickable else 0)
+        self.setFixedSize(width, 24)
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        bg, fg = theme.chip_colors(self.kind)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(self.rect()), 12, 12)
+        color = QColor(bg)
+        if self.underMouse() and self.clickable:
+            color = color.darker(108) if theme.colors()["name"] == "light" else color.lighter(125)
+        p.fillPath(path, color)
+        p.setPen(QColor(fg))
+        p.setFont(self._font)
+        text_rect = QRectF(11, 0, self.width() - 22 - (16 if self.clickable else 0), self.height())
+        p.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, self.label)
+        if self.clickable:
+            from .icons import pixmap
+
+            p.drawPixmap(self.width() - 22, 5, pixmap("chevron", fg, 14, 2.4))
+        p.end()
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self.update()
+        super().leaveEvent(event)
+
+
+def icon_button(name: str, tip: str, on_click=None, color_key: str = "text") -> QPushButton:
+    """A 32×32 outlined button with one line icon (Open job, Close…)."""
+    from .icons import SMALL, icon
+
+    btn = QPushButton()
+    btn.setObjectName("IconButton")
+    btn.setIcon(icon(name, theme.colors()[color_key], 16))
+    btn.setIconSize(SMALL)
+    btn.setToolTip(tip)
+    btn.setAccessibleName(tip)
+    btn.setCursor(Qt.PointingHandCursor)
+    if on_click:
+        btn.clicked.connect(on_click)
+    return btn
+
+
+def with_icon(btn: QPushButton, name: str, color_key: str = "text", size: int = 14) -> QPushButton:
+    from .icons import icon
+
+    btn.setIcon(icon(name, theme.colors()[color_key], size))
+    btn.setIconSize(QSize(size, size))
+    return btn
+
+
+class CountTabs(QFrame):
+    """The Applications tabs: a pill bar, each tab with its count in a small badge."""
+
+    changed = Signal(str)
+
+    def __init__(self, options: list[tuple[str, str]], current: str):
+        super().__init__()
+        self.setObjectName("TabBar")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setSpacing(2)
+        self.group = QButtonGroup(self)
+        self.group.setExclusive(True)
+        self.buttons: dict[str, QPushButton] = {}
+        self.counts: dict[str, QLabel] = {}
+        self.texts: dict[str, QLabel] = {}
+        for key, text in options:
+            btn = QPushButton()
+            btn.setObjectName("TabButton")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            inner = QHBoxLayout(btn)
+            inner.setContentsMargins(14, 0, 8, 0)
+            inner.setSpacing(8)
+            name = QLabel(text)
+            count = QLabel("·")
+            count.setAlignment(Qt.AlignCenter)
+            count.setMinimumWidth(24)
+            for lab in (name, count):
+                lab.setAttribute(Qt.WA_TransparentForMouseEvents)
+                inner.addWidget(lab)
+            btn.setFixedHeight(34)
+            btn.setMinimumWidth(QFontMetrics(btn.font()).horizontalAdvance(text) + 66)
+            btn.toggled.connect(lambda _on: self._paint())
+            btn.clicked.connect(lambda _=False, k=key: self.changed.emit(k))
+            self.group.addButton(btn)
+            lay.addWidget(btn)
+            self.buttons[key], self.counts[key], self.texts[key] = btn, count, name
+        self.set_current(current)
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+
+    def set_current(self, key: str) -> None:
+        if key in self.buttons:
+            self.buttons[key].setChecked(True)
+        self._paint()
+
+    def set_counts(self, counts: dict) -> None:
+        for key, lab in self.counts.items():
+            lab.setText(f"{counts.get(key, 0):,}")
+            lab.setMinimumWidth(QFontMetrics(lab.font()).horizontalAdvance(lab.text()) + 14)
+        self._paint()
+
+    def _paint(self) -> None:
+        c = theme.colors()
+        for key, btn in self.buttons.items():
+            on = btn.isChecked()
+            self.texts[key].setStyleSheet(f"color: {c['text'] if on else c['muted']}; font-weight: 600;")
+            bg, fg = (c["accent"], c["accent_fg"]) if on else (c["border"], c["muted"])
+            self.counts[key].setStyleSheet(
+                f"background: {bg}; color: {fg}; border-radius: 9px; padding: 1px 6px; font-size: 8pt; font-weight: 700;")
 
 
 class Dot(QLabel):
