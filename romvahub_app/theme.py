@@ -172,7 +172,7 @@ QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['acc
 /* The applications table */
 #TableCard {{ background: {c['surface']}; border: 1px solid {c['border']}; border-radius: 12px; }}
 QTableWidget {{ background: transparent; border: none; gridline-color: transparent; }}
-QTableWidget::item {{ border-bottom: 1px solid {c['border']}; padding-left: 8px; }}
+QTableWidget::item {{ border-bottom: 1px solid {c['border']}; padding-left: 5px; }}
 QTableWidget::item:hover {{ background: {c['hover']}; }}
 QTableWidget::item:selected {{ background: {c['sel']}; color: {c['text']}; }}
 QHeaderView {{ background: transparent; }}

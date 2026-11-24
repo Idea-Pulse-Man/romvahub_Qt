@@ -22,6 +22,7 @@ from .widgets import Chip, CountTabs, Toast, button, icon_button, label, page_he
 COLUMNS = ["", "Company", "Role", "Location", "Found", "Status", "Resume", "Cover letter", "Actions"]
 # Fixed columns (px) and how the rest of the width is shared by the text columns.
 FIXED = {"": 44, "Found": 76, "Status": 168, "Resume": 104, "Cover letter": 116, "Actions": 142}
+CENTERED = {"", "Found", "Status", "Resume", "Cover letter", "Actions"}
 SHARE = {"Company": 1.0, "Profile": 0.75, "Role": 1.45, "Location": 1.0}
 MINIMUM = {"Company": 120, "Profile": 90, "Role": 140, "Location": 100}
 
@@ -298,9 +299,13 @@ class ApplicationsPage(QWidget):
             cols.insert(2, "Profile")
         self.table.clear()
         self.table.setColumnCount(len(cols))
-        self.table.setHorizontalHeaderLabels([name.upper() for name in cols])
+        for i, name in enumerate(cols):
+            head = QTableWidgetItem(name.upper())
+            head.setTextAlignment((Qt.AlignHCenter if name in CENTERED else Qt.AlignLeft) | Qt.AlignVCenter)
+            self.table.setHorizontalHeaderItem(i, head)
         self._col = {name: i for i, name in enumerate(cols)}
         self.table.setRowCount(len(self.rows))
+        self._company_labels: list[tuple[QLabel, str]] = []
         for r, bid in enumerate(self.rows):
             self._fill_row(r, bid, show_profile, c)
         self._fit_columns()
@@ -335,12 +340,13 @@ class ApplicationsPage(QWidget):
 
         who = QWidget()
         wl = QVBoxLayout(who)
-        wl.setContentsMargins(10, 0, 6, 0)
+        wl.setContentsMargins(3, 0, 6, 0)
         wl.setSpacing(1)
         wl.setAlignment(Qt.AlignVCenter)
         name = QLabel(str(bid.get("company", "")))
         name.setObjectName("Strong")
         name.setToolTip(name.text())
+        self._company_labels.append((name, name.text()))
         wl.addWidget(name)
         wl.addWidget(label(f"#{bid.get('number', '')}", "Faint"))
         self.table.setCellWidget(r, col["Company"], who)
@@ -352,14 +358,17 @@ class ApplicationsPage(QWidget):
         location = self._item(str(bid.get("location", "")), c["muted"])
         location.setToolTip(location.text())
         self.table.setItem(r, col["Location"], location)
-        self.table.setItem(r, col["Found"], self._item(_short_date(bid.get("bidDate")), c["muted"]))
+        found = self._item(_short_date(bid.get("bidDate")), c["muted"])
+        found.setTextAlignment(Qt.AlignCenter)
+        self.table.setItem(r, col["Found"], found)
 
         chip_box = QWidget()
         cl = QHBoxLayout(chip_box)
-        cl.setContentsMargins(8, 0, 0, 0)
+        cl.setContentsMargins(0, 0, 0, 0)
         chip = Chip(label_text, kind, clickable=True)
         chip.setToolTip("Change status")
         chip.clicked.connect(lambda _=False, b=bid, w=chip: self._status_menu(b, w))
+        cl.addStretch(1)
         cl.addWidget(chip)
         cl.addStretch(1)
         self.table.setCellWidget(r, col["Status"], chip_box)
@@ -369,8 +378,9 @@ class ApplicationsPage(QWidget):
 
         actions = QWidget()
         al = QHBoxLayout(actions)
-        al.setContentsMargins(8, 0, 8, 0)
+        al.setContentsMargins(0, 0, 0, 0)
         al.setSpacing(8)
+        al.addStretch(1)
         open_btn = icon_button("external", "Open job post", lambda _=False, b=bid: self._open_job(b))
         open_btn.setEnabled(bool(bid.get("jobUrl")))
         al.addWidget(open_btn)
@@ -408,14 +418,14 @@ class ApplicationsPage(QWidget):
         words = QLabel(text)
         words.setStyleSheet(f"color: {text_color}; font-weight: {600 if bold else 500};")
         lay.addWidget(words)
-        lay.addStretch(1)
         return box
 
     def _doc_cell(self, bid: dict, kind: str) -> QWidget:
         c = theme.colors()
         box = QWidget()
         lay = QHBoxLayout(box)
-        lay.setContentsMargins(4, 0, 4, 0)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addStretch(1)
         has = bool(bid.get("hasResume") if kind == "resume" else bid.get("hasCoverLetter"))
         if has:
             link = button("Ready", "Ghost", lambda _=False, b=bid, k=kind: self._view(b, k),
@@ -457,6 +467,10 @@ class ApplicationsPage(QWidget):
             else:
                 width = FIXED.get(name, 110)
             self.table.setColumnWidth(i, width)
+        # Long company names end in "…" (the full name is in the tooltip).
+        room = self.table.columnWidth(self._col["Company"]) - 14
+        for name_label, full in getattr(self, "_company_labels", []):
+            name_label.setText(name_label.fontMetrics().elidedText(full, Qt.ElideRight, room))
         self._place_select_all()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
