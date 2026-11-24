@@ -98,7 +98,8 @@ def _checkbox_image(c: dict) -> str:
 def stylesheet(c: dict) -> str:
     return f"""
 * {{ font-family: "Segoe UI", "Inter", sans-serif; color: {c['text']}; outline: none; }}
-QMainWindow, QDialog, #Page, QStackedWidget {{ background: {c['bg']}; }}
+QMainWindow, QDialog, #Page, #MainStack {{ background: {c['bg']}; }}
+#Card QStackedWidget, #Card QStackedWidget > QWidget {{ background: transparent; }}
 QToolTip {{ background: {c['surface']}; color: {c['text']}; border: 1px solid {c['border']}; padding: 5px 8px; border-radius: 6px; }}
 QLabel {{ background: transparent; }}
 

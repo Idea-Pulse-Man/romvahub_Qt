@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QHBoxLayout, QInputDialog, QLineEdit, QListWidget, QListWidgetItem, QStackedWidget, QVBoxLayout,
+    QCheckBox, QHBoxLayout, QInputDialog, QLineEdit, QListWidget, QListWidgetItem, QSizePolicy, QVBoxLayout,
     QWidget,
 )
 
@@ -35,6 +35,7 @@ class SignInWindow(QWidget):
         outer.addStretch(1)
         card = Card()
         card.setMaximumWidth(480)
+        card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         card.body.setContentsMargins(32, 30, 32, 26)
         card.body.setSpacing(14)
         row = QHBoxLayout()
@@ -67,11 +68,10 @@ class SignInWindow(QWidget):
         seg_row.addStretch(1)
         card.body.addLayout(seg_row)
 
-        self.stack = QStackedWidget()
-        self.stack.addWidget(self._account_page())
-        self.stack.addWidget(self._mfa_page())
-        self.stack.addWidget(self._token_page())
-        card.body.addWidget(self.stack)
+        # The three forms; only the one in use is shown (hidden ones take no space).
+        self.forms = [self._account_page(), self._mfa_page(), self._token_page()]
+        for form in self.forms:
+            card.body.addWidget(form)
 
         self.error = label(message, "Error", wrap=True)
         self.error.setVisible(bool(message))
@@ -94,11 +94,12 @@ class SignInWindow(QWidget):
         lay = QVBoxLayout(page)
         lay.setContentsMargins(0, 6, 0, 0)
         lay.setSpacing(8)
-        lay.addWidget(label("Email", "Label"))
+        lay.addWidget(label("EMAIL", "Label"))
         self.email = QLineEdit(config.last_email)
         self.email.setPlaceholderText("you@example.com")
         lay.addWidget(self.email)
-        lay.addWidget(label("Password", "Label"))
+        lay.addSpacing(6)
+        lay.addWidget(label("PASSWORD", "Label"))
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
         self.password.setPlaceholderText("Your password")
@@ -128,7 +129,7 @@ class SignInWindow(QWidget):
         self.verify_btn = button("Verify", "Primary", self._verify)
         self.verify_btn.setMinimumHeight(40)
         lay.addWidget(self.verify_btn)
-        lay.addWidget(button("Back", "Link", lambda: self.stack.setCurrentIndex(0)))
+        lay.addWidget(button("Back", "Link", lambda: self._show_page(0)))
         return page
 
     def _token_page(self) -> QWidget:
@@ -179,10 +180,15 @@ class SignInWindow(QWidget):
             self._pending_tokens.clear()
             self._load_saved_tokens()
 
+    def _show_page(self, index: int) -> None:
+        """Show one form; the card is only as tall as that form."""
+        for i, form in enumerate(self.forms):
+            form.setVisible(i == index)
+
     def _switch(self, method: str) -> None:
         config.method = method
         self.method.set_current(method)
-        self.stack.setCurrentIndex(2 if method == "token" else 0)
+        self._show_page(2 if method == "token" else 0)
         self._set_error("")
 
     def _set_error(self, text: str) -> None:
@@ -214,7 +220,7 @@ class SignInWindow(QWidget):
         if isinstance(error, MfaRequired):
             self._challenge = error.challenge
             self.code.clear()
-            self.stack.setCurrentIndex(1)
+            self._show_page(1)
             self.code.setFocus()
             return
         self._set_error(getattr(error, "message", str(error)))

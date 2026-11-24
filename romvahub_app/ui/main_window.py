@@ -54,6 +54,7 @@ class MainWindow(QMainWindow):
         self.offline = Banner()
         main.addWidget(self.offline)
         self.stack = QStackedWidget()
+        self.stack.setObjectName("MainStack")
         main.addWidget(self.stack, 1)
         main.addWidget(self._statusbar())
         root.addLayout(main, 1)
