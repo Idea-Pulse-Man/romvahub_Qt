@@ -116,8 +116,11 @@ class Config:
     # The Resume Maker.
     @property
     def agent_dir(self) -> str:
+        # The built-in agent always wins; a chosen folder only counts while it still holds the agent.
+        if bundled := bundled_agent_dir():
+            return bundled
         saved = str(_get("agent_dir", ""))
-        return saved or default_agent_dir()
+        return saved if saved and _is_agent(Path(saved)) else default_agent_dir()
 
     @agent_dir.setter
     def agent_dir(self, value: str) -> None:
@@ -190,10 +193,22 @@ def app_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _is_agent(folder: Path) -> bool:
+    return (folder / "src" / "agent.js").exists()
+
+
+def bundled_agent_dir() -> str:
+    """The Resume agent built into the app (build.ps1): <app>\\agent, with its own node.exe and node_modules."""
+    folder = app_dir() / "agent"
+    return str(folder) if _is_agent(folder) and (folder / "node.exe").exists() else ""
+
+
 def default_agent_dir() -> str:
-    """The Resume agent's folder: next to the app (the repo layout), or bundled inside it."""
+    """The Resume agent's folder: built in, or next to the app (the repo layout)."""
+    if bundled := bundled_agent_dir():
+        return bundled
     for candidate in (app_dir() / "resume_agent", app_dir().parent / "resume_agent"):
-        if (candidate / "src" / "agent.js").exists():
+        if _is_agent(candidate):
             return str(candidate)
     return ""
 

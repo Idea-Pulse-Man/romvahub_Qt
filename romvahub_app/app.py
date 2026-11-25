@@ -190,7 +190,11 @@ def _start_debug_log() -> None:
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%H:%M:%S")
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
-    for handler in (logging.StreamHandler(sys.stdout), logging.FileHandler(path, encoding="utf-8")):
+    # The built RomvaHub.exe has no console (sys.stdout is None): the file only.
+    handlers = [logging.FileHandler(path, encoding="utf-8")]
+    if sys.stdout is not None:
+        handlers.append(logging.StreamHandler(sys.stdout))
+    for handler in handlers:
         handler.setFormatter(fmt)
         root.addHandler(handler)
     logging.getLogger("httpx").setLevel(logging.WARNING)

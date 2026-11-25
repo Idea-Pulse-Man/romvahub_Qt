@@ -1,4 +1,4 @@
-"""The Resume / cover letter preview: the PDF on screen, with PDF and Word downloads."""
+"""The Resume / cover letter preview: the PDF on screen, PDF and Word downloads, and Remake / Delete."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QStackedWidget,
 
 from .. import tasks
 from ..state import AppState
-from .widgets import Segmented, button, label
+from . import resume_actions
+from .widgets import Banner, Segmented, button, label
 
 KINDS = {"resume": "Resume", "cover-letter": "Cover letter"}
 
@@ -47,8 +48,18 @@ class DocViewer(QDialog):
         hl.addWidget(self.switch)
         hl.addWidget(button("⬇  PDF", "Primary", lambda: self.download("pdf")))
         hl.addWidget(button("⬇  Word (DOCX)", "", lambda: self.download("docx")))
+        self.remake_btn = button("Remake", "", self._remake, "Make the Resume and cover letter again (the old ones "
+                                                            "stay until the new ones are saved)")
+        self.remake_btn.setEnabled(not bid.get("remakeRequested"))
+        if bid.get("remakeRequested"):
+            self.remake_btn.setText("Remake queued")
+        hl.addWidget(self.remake_btn)
+        self.delete_btn = button("Delete", "", self._delete, "Delete this document")
+        hl.addWidget(self.delete_btn)
         hl.addWidget(button("✕", "", self.close, "Close"))
         lay.addWidget(head)
+        self.flags = Banner()
+        lay.addWidget(self.flags)
 
         self.stack = QStackedWidget()
         self.message = label("Loading…", "Muted")
@@ -74,9 +85,24 @@ class DocViewer(QDialog):
 
         self.show_kind(kind)
 
+    def _remake(self) -> None:
+        def done(_n):
+            self.remake_btn.setText("Remake queued")
+            self.remake_btn.setEnabled(False)
+
+        resume_actions.remake(self, self.state, bids=[self.bid], on_done=done)
+
+    def _delete(self) -> None:
+        resume_actions.delete_doc(self, self.state, self.bid, self.kind, self.close)
+
     def show_kind(self, kind: str) -> None:
         self.kind = kind
         self.switch.set_current(kind)
+        reasons = resume_actions.reasons_of(self.bid, kind)
+        self.flags.show_text(resume_actions.reasons_tip(reasons) if reasons else "")
+        has = self.bid.get("hasResume", True) if kind == "resume" else self.bid.get("hasCoverLetter", True)
+        self.delete_btn.setEnabled(bool(has))
+        self.delete_btn.setText("Delete Resume" if kind == "resume" else "Delete letter")
         self.setWindowTitle(f"{self.bid.get('company', '')} — {KINDS[kind]}")
         if kind == "cover-letter" and not self.bid.get("hasCoverLetter", True):
             self._show_message("No cover letter was made for this application.")

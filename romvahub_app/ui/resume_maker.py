@@ -7,12 +7,14 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from ..config import AI_SITES, config
+from ..config import AI_SITES, bundled_agent_dir, config
 from ..maker import Maker, node_path
 from ..state import AppState
+from .resume_actions import ResumeCheckCard
 from .widgets import Card, Dot, Segmented, button, label, page_header
 
-STEPS = ["Read the job post", "Write the resume", "Write the cover letter", "Build the Word and PDF files", "Save to romva"]
+STEPS = ["Read the job post", "Write the resume", "Write the cover letter", "Build the Word and PDF files",
+         "Save to romva and check it"]
 
 
 class ResumeMakerPage(QWidget):
@@ -92,6 +94,11 @@ class ResumeMakerPage(QWidget):
         ai.body.addWidget(self.scope_note)
         left.addWidget(ai)
 
+        # The Resume check: flagged Drafts, Check all, Remake.
+        self.check_card = ResumeCheckCard(state, maker)
+        self.check_card.open_doc.connect(self._open_doc)
+        left.addWidget(self.check_card)
+
         # Now making.
         now = Card("Now making")
         self.job_title = label("Nothing is being made right now.", "")
@@ -111,13 +118,20 @@ class ResumeMakerPage(QWidget):
         self.agent_dir = label("", "Muted", wrap=True)
         setup.body.addWidget(self.agent_dir)
         row = QHBoxLayout()
-        row.addWidget(button("Choose folder…", "", self._choose_dir))
-        row.addWidget(button("Install / Update", "", self.maker.install))
+        self.choose_btn = button("Choose folder…", "", self._choose_dir)
+        self.install_btn = button("Install / Update", "", self.maker.install)
+        row.addWidget(self.choose_btn)
+        row.addWidget(self.install_btn)
         row.addStretch(1)
         setup.body.addLayout(row)
         self.node = label("", "Muted")
         setup.body.addWidget(self.node)
         left.addWidget(setup)
+        # The built RomvaHub.exe carries the agent and Node.js: nothing to choose or install.
+        self.bundled = bool(bundled_agent_dir())
+        self.choose_btn.setVisible(not self.bundled)
+        self.install_btn.setVisible(not self.bundled)
+        self.node.setVisible(not self.bundled)
         left.addStretch(1)
         cols.addLayout(left, 3)
 
@@ -210,6 +224,10 @@ class ResumeMakerPage(QWidget):
                 lab.setObjectName("Muted")
             lab.style().unpolish(lab)
             lab.style().polish(lab)
+        if self.bundled:
+            self.agent_dir.setText("Built into the app (with its own Node.js). Nothing to install: "
+                                   "just sign in to the AI website in its Chrome window the first time.")
+            return
         self.agent_dir.setText(f"Folder: {self.maker.agent_dir or '(not found)'}")
         self.node.setText(f"Node.js: {node_path() or 'not found — install it from nodejs.org'}")
 
@@ -220,6 +238,11 @@ class ResumeMakerPage(QWidget):
         else:
             profile = self.profile_pick.currentData() if self.state.session.mode == "token" else None
             self.maker.start(profile)
+
+    def _open_doc(self, bid: dict, kind: str) -> None:
+        from .doc_viewer import DocViewer
+
+        DocViewer(self.state, bid, kind, self).exec()
 
     def _pick_ai(self, key: str) -> None:
         config.maker_ai = key

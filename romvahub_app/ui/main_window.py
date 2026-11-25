@@ -62,6 +62,9 @@ class MainWindow(QMainWindow):
         main.addWidget(self._statusbar())
         root.addLayout(main, 1)
 
+        from . import resume_actions
+
+        resume_actions.MAKER = maker
         self.home = HomePage(state, maker)
         self.applications = ApplicationsPage(state, maker)
         self.maker_page = ResumeMakerPage(state, maker)

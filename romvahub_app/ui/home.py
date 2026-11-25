@@ -100,13 +100,14 @@ class HomePage(QWidget):
 
             counts = {}
             for key, _t, q in TABS:
-                if key == "all":
+                if key in ("all", "remake"):
                     continue
                 params = {"page": 1, "pageSize": 1}
                 if q.get("statuses"):
                     params["statuses"] = ",".join(q["statuses"])
-                if q.get("hasResume"):
-                    params["hasResume"] = q["hasResume"]
+                for name in ("hasResume", "needsRemake"):
+                    if q.get(name):
+                        params[name] = q[name]
                 if profile and api.session.mode == "account":
                     params["profileId"] = profile
                 counts[key] = int((api.request("GET", "/api/bids", params=params, profile_id=profile) or {}).get("total", 0))

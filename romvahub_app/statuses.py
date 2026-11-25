@@ -42,10 +42,11 @@ GROUP_STARTS = {"Applied", "Screening (Round 1)", "Offer", "Failed"}
 
 INTERVIEW_STATUSES = [s for s in STATUSES if KIND[s] in ("interview", "offer")]
 
-# (tab id, label, query): `statuses` and `hasResume` are the list filters.
+# (tab id, label, query): `statuses`, `hasResume` and `needsRemake` are the list filters.
 TABS = [
     ("ready", "Ready to apply", {"statuses": ["Draft"], "hasResume": "true"}),
     ("draft", "Draft", {"statuses": ["Draft"], "hasResume": "false"}),
+    ("remake", "Needs remake", {"statuses": ["Draft"], "needsRemake": "true"}),
     ("applied", "Applied", {"statuses": ["Applied"]}),
     ("interview", "Interviews", {"statuses": INTERVIEW_STATUSES}),
     ("all", "All", {}),

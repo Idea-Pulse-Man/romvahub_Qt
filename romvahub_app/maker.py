@@ -22,7 +22,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from . import tasks
-from .config import config, data_dir
+from .config import bundled_agent_dir, config, data_dir
 
 _log = logging.getLogger("romvahub.maker")
 LINE = re.compile(r"^(\S+)\s+(INFO|WARN|ERROR)\s+(.*)$")
@@ -40,6 +40,9 @@ class CurrentJob:
 
 
 def node_path() -> str:
+    """The built-in node.exe (build.ps1), else the computer's Node.js."""
+    if bundled := bundled_agent_dir():
+        return str(Path(bundled) / "node.exe")
     found = shutil.which("node")
     if found:
         return found

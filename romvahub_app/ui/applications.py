@@ -15,13 +15,14 @@ from .. import chrome, tasks, theme
 from ..config import PAGE_SIZES, config
 from ..statuses import GROUP_STARTS, STATUSES, TABS, display_status
 from ..state import AppState
+from . import resume_actions
 from .doc_viewer import DocViewer
 from .icons import pixmap
 from .widgets import Chip, CountTabs, Toast, button, icon_button, label, page_header, with_icon
 
 COLUMNS = ["", "Company", "Role", "Location", "Found", "Status", "Resume", "Cover letter", "Actions"]
 # Fixed columns (px) and how the rest of the width is shared by the text columns.
-FIXED = {"": 44, "Found": 76, "Status": 168, "Resume": 104, "Cover letter": 116, "Actions": 142}
+FIXED = {"": 44, "Found": 76, "Status": 168, "Resume": 112, "Cover letter": 116, "Actions": 182}
 CENTERED = {"", "Found", "Status", "Resume", "Cover letter", "Actions"}
 SHARE = {"Company": 1.0, "Profile": 0.75, "Role": 1.45, "Location": 1.0}
 MINIMUM = {"Company": 120, "Profile": 90, "Role": 140, "Location": 100}
@@ -223,8 +224,9 @@ class ApplicationsPage(QWidget):
             params = {"page": page, "pageSize": size, "sort": "number"}
             if query.get("statuses"):
                 params["statuses"] = ",".join(query["statuses"])
-            if query.get("hasResume"):
-                params["hasResume"] = query["hasResume"]
+            for key in ("hasResume", "needsRemake"):
+                if query.get(key):
+                    params[key] = query[key]
             if search:
                 params["search"] = search
             if profile and api.session.mode == "account":
@@ -249,11 +251,15 @@ class ApplicationsPage(QWidget):
                 params = {"page": 1, "pageSize": 1}
                 if q.get("statuses"):
                     params["statuses"] = ",".join(q["statuses"])
-                if q.get("hasResume"):
-                    params["hasResume"] = q["hasResume"]
+                for name in ("hasResume", "needsRemake"):
+                    if q.get(name):
+                        params[name] = q[name]
                 if profile and api.session.mode == "account":
                     params["profileId"] = profile
-                data = api.request("GET", "/api/bids", params=params, profile_id=profile)
+                try:
+                    data = api.request("GET", "/api/bids", params=params, profile_id=profile)
+                except Exception:  # noqa: BLE001 - an older server without a filter: no count
+                    continue
                 counts[key] = int((data or {}).get("total", 0))
             return counts
 
@@ -420,6 +426,9 @@ class ApplicationsPage(QWidget):
             al.addWidget(off)
         else:
             al.addWidget(self._state_label("check", "Applied", c["muted"], c["muted"]))
+        more = icon_button("more", "Check, remake or delete the Resume and cover letter")
+        more.setMenu(resume_actions.actions_menu(self, self.state, bid, None, self._view))
+        al.addWidget(more)
         al.addStretch(1)
         self.table.setCellWidget(r, col["Actions"], actions)
 
@@ -451,7 +460,23 @@ class ApplicationsPage(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addStretch(1)
         has = bool(bid.get("hasResume") if kind == "resume" else bid.get("hasCoverLetter"))
-        if has:
+        job = self.maker.job
+        if has and bid.get("remakeRequested"):
+            # A remake: the old one stays until the new one is saved.
+            if job and str(job.number) == str(bid.get("number")):
+                lay.addWidget(self._state_label("spinner", "Remaking…", c["accent"], c["accent"], True))
+            else:
+                queued = self._state_label("clock", "Remake", c["muted"], c["muted"])
+                queued.setToolTip("Queued for a remake. The current one stays until the new one is saved.")
+                lay.addWidget(queued)
+        elif has and resume_actions.reasons_of(bid, kind):
+            flag = button("Remake?", "Ghost", lambda _=False, b=bid, k=kind: self._view(b, k),
+                          resume_actions.reasons_tip(resume_actions.reasons_of(bid, kind)))
+            flag.setIcon(QIcon(pixmap("alert", c["danger"], 15, 2.2)))
+            flag.setIconSize(QSize(15, 15))
+            flag.setStyleSheet(f"QPushButton {{ color: {c['danger']}; font-weight: 600; }}")
+            lay.addWidget(flag)
+        elif has:
             link = button("Ready", "Ghost", lambda _=False, b=bid, k=kind: self._view(b, k),
                           "Open the preview (PDF / Word download)")
             link.setIcon(QIcon(pixmap("check", c["ok"], 15, 2.4)))
@@ -459,7 +484,6 @@ class ApplicationsPage(QWidget):
             link.setStyleSheet(f"QPushButton {{ color: {c['text']}; font-weight: 500; }}")
             lay.addWidget(link)
         else:
-            job = self.maker.job
             if job and str(job.number) == str(bid.get("number")) and bid.get("status") == "Draft":
                 lay.addWidget(self._state_label("spinner", "Making…", c["accent"], c["accent"], True))
             elif self.maker.running and bid.get("status") == "Draft" and not bid.get("hasResume"):
