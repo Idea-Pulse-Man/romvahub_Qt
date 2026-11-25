@@ -150,12 +150,12 @@ class Session:
 
     @property
     def role_label(self) -> str:
-        """Super Admin, Admin, or a User's kind: Bidder or Caller."""
+        """Super Admin, Admin or User."""
         if self.is_super_admin:
             return "Super Admin"
         if self.is_admin:
             return "Admin"
-        return "Caller" if (self.user or {}).get("kind") == "caller" else "Bidder"
+        return "User"
 
 
 class Api:

@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         names = QVBoxLayout()
         names.setSpacing(0)
         names.addWidget(label("romva hub", "Brand"))
-        role = self.state.session.role_label if self.state.session.mode == "account" else "Bidder · tokens"
+        role = self.state.session.role_label if self.state.session.mode == "account" else "User · tokens"
         names.addWidget(label(role, "Faint"))
         brand.addLayout(names, 1)
         lay.addLayout(brand)

@@ -1,8 +1,8 @@
 """Admin pages, inside the app (nothing opens the website): Users, Tokens, AI settings, Pipeline and Calendar.
 
-Roles: Super Admin (an admin who also makes Profile tokens), Admin, and User,
-who is a Bidder or a Caller. Any admin sets roles, but not their own and not
-the Super Admin's (the server checks this too).
+Roles: Super Admin (an admin who also makes Profile tokens), Admin and User.
+Any admin sets roles, but not their own and not the Super Admin's (the server
+checks this too).
 """
 
 from __future__ import annotations
@@ -22,18 +22,18 @@ from ..state import AppState
 from ..statuses import GROUP_STARTS, INTERVIEW_STATUSES, KIND, STATUSES
 from .widgets import Card, Chip, button, icon_button, label, page_header
 
-# (label, role, kind) for the role picker.
-ROLE_CHOICES = [("Admin", "admin", "bidder"), ("Bidder", "user", "bidder"), ("Caller", "user", "caller")]
-ROLE_CHIP = {"Super Admin": "interview", "Admin": "ready", "Bidder": "applied", "Caller": "offer"}
+# (label, role) for the role picker.
+ROLE_CHOICES = [("Admin", "admin"), ("User", "user")]
+ROLE_CHIP = {"Super Admin": "interview", "Admin": "ready", "User": "applied"}
 AI_PROVIDERS = [("openai", "OpenAI"), ("anthropic", "Anthropic (Claude)"), ("gemini", "Google Gemini"),
                 ("deepseek", "DeepSeek")]
 
 
 def role_of(user: dict) -> str:
-    """Super Admin, Admin, Bidder or Caller."""
+    """Super Admin, Admin or User."""
     if user.get("role") == "admin":
         return "Super Admin" if user.get("superAdmin") else "Admin"
-    return "Caller" if user.get("kind") == "caller" else "Bidder"
+    return "User"
 
 
 def _message(error: Exception) -> str:
@@ -159,7 +159,7 @@ class UsersPage(_Page):
     HEADERS = ["Name", "Email", "Role", "Status", "Applications", "Last sign-in", "Where"]
 
     def __init__(self, state: AppState):
-        super().__init__(state, "Users", "Sign-in accounts. Roles: Super Admin, Admin, and User (Bidder or Caller).")
+        super().__init__(state, "Users", "Sign-in accounts. Roles: Super Admin, Admin and User.")
         self.users: list[dict] = []
         self.head.addWidget(button("Add user", "Primary", self._add), 0, Qt.AlignTop)
 
@@ -238,7 +238,7 @@ class UsersPage(_Page):
         self.suspend_btn.setEnabled(plain)
         self.delete_btn.setEnabled(plain)
         self.suspend_btn.setText("Reactivate" if user and user.get("status") == "suspended" else "Suspend")
-        tip = "" if plain or not user else "Admins can't be suspended or deleted. Make them a Bidder or Caller first."
+        tip = "" if plain or not user else "Admins can't be suspended or deleted. Make them a User first."
         self.suspend_btn.setToolTip(tip)
         self.delete_btn.setToolTip(tip)
 
@@ -272,11 +272,11 @@ class UsersPage(_Page):
         password.setPlaceholderText("At least 12 characters" if new else "Leave empty to keep the password")
         form.addRow("Password", password)
         role = QComboBox()
-        for text, r, k in ROLE_CHOICES:
-            role.addItem(text, (r, k))
-        current = "Bidder" if new else role_of(user)
+        for text, r in ROLE_CHOICES:
+            role.addItem(text, r)
+        current = "User" if new else role_of(user)
         if current == "Super Admin":
-            role.insertItem(0, "Super Admin", ("admin", "bidder"))
+            role.insertItem(0, "Super Admin", "admin")
             role.setCurrentIndex(0)
             role.setEnabled(False)
             role.setToolTip("The Super Admin stays an admin.")
@@ -287,8 +287,8 @@ class UsersPage(_Page):
             role.setToolTip("You can't change your own role.")
         form.addRow("Role", role)
         lay.addLayout(form)
-        lay.addWidget(label("Admin: everything, on every Profile. Bidder and Caller: the Profiles you give them "
-                            "(same access; Caller takes the interview calls).", "Muted", wrap=True))
+        lay.addWidget(label("Admin: everything, on every Profile. User: the Profiles you give them.", "Muted",
+                            wrap=True))
         buttons = _ok_cancel(dlg, lay, "Add user" if new else "Save")
 
         def accept():
@@ -299,9 +299,9 @@ class UsersPage(_Page):
             if (new or password.text()) and len(password.text()) < 12:
                 QMessageBox.warning(dlg, "Users", "The password must be at least 12 characters.")
                 return
-            r, k = role.currentData()
+            r = role.currentData()
             if new:
-                body = {"email": mail, "password": password.text(), "role": r, "kind": k}
+                body = {"email": mail, "password": password.text(), "role": r}
                 self._run(lambda: self.state.api.request("POST", "/api/admin/users", json_body=body))
             else:
                 body = {}
@@ -309,11 +309,8 @@ class UsersPage(_Page):
                     body["email"] = mail
                 if password.text():
                     body["password"] = password.text()
-                if role.isEnabled():
-                    if r != user.get("role"):
-                        body["role"] = r
-                    if k != user.get("kind"):
-                        body["kind"] = k
+                if role.isEnabled() and r != user.get("role"):
+                    body["role"] = r
                 if not body:
                     dlg.accept()
                     return
@@ -524,7 +521,7 @@ class TokensPage(_Page):
             profile.setCurrentIndex(index)
         form.addRow("Profile", profile)
         name = QLineEdit()
-        name.setPlaceholderText("Who or what it is for (e.g. a bidder's name)")
+        name.setPlaceholderText("Who or what it is for (e.g. a user's name)")
         form.addRow("Label", name)
         days = QSpinBox()
         days.setRange(1, 365)

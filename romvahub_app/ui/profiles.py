@@ -2,7 +2,7 @@
 
 Cards show the photo or initials, the headline, how complete the Profile is,
 email, phone and who it is shared with. Admins also create, share and delete
-Profiles and change the photo. Bidders and Callers edit the Profiles they work
+Profiles and change the photo. Users edit the Profiles they work
 on (personal, address, links, application defaults, education, work, prompts,
 Avoid lists).
 
@@ -1055,7 +1055,7 @@ class ProfilesPage(QWidget):
         dlg.setMinimumWidth(440)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(20, 18, 20, 16)
-        lay.addWidget(label("Tick the Bidders and Callers who work on this Profile. Admins see every Profile already.",
+        lay.addWidget(label("Tick the users who work on this Profile. Admins see every Profile already.",
                             "Muted", wrap=True))
         box = QListWidget()
         from .admin import role_of
