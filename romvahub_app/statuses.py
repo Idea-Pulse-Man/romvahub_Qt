@@ -44,8 +44,8 @@ INTERVIEW_STATUSES = [s for s in STATUSES if KIND[s] in ("interview", "offer")]
 
 # (tab id, label, query): `statuses` and `hasResume` are the list filters.
 TABS = [
-    ("draft", "Draft", {"statuses": ["Draft"], "hasResume": "false"}),
     ("ready", "Ready to apply", {"statuses": ["Draft"], "hasResume": "true"}),
+    ("draft", "Draft", {"statuses": ["Draft"], "hasResume": "false"}),
     ("applied", "Applied", {"statuses": ["Applied"]}),
     ("interview", "Interviews", {"statuses": INTERVIEW_STATUSES}),
     ("all", "All", {}),

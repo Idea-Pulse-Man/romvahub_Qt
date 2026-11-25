@@ -36,7 +36,9 @@ class ApplicationsPage(QWidget):
         self.setObjectName("Page")
         self.state = state
         self.maker = maker
-        self.tab = "all"
+        self.tab = "ready"
+        # Opens on Ready; the first counts move it to Draft when nothing is Ready.
+        self._auto_tab = True
         self.page = 1
         self.total = 0
         self.total_pages = 1
@@ -172,6 +174,7 @@ class ApplicationsPage(QWidget):
         self.tabs.set_current(tab)
 
     def _pick_tab(self, tab: str) -> None:
+        self._auto_tab = False
         self.tab = tab
         self.checked.clear()
         self.reload(reset_page=True)
@@ -242,6 +245,10 @@ class ApplicationsPage(QWidget):
     def _counts_loaded(self, counts: dict) -> None:
         self.tabs.set_counts(counts)
         self.counts_changed.emit(counts)
+        if self._auto_tab:
+            self._auto_tab = False
+            if self.tab == "ready" and not counts.get("ready"):
+                self.set_tab("draft")
 
     def _loaded(self, seq: int, data: dict, version: str) -> None:
         if seq != self._load_seq:
