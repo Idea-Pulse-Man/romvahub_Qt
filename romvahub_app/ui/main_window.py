@@ -9,10 +9,11 @@ from PySide6.QtWidgets import (
     QStackedWidget, QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
-from .. import APP_VERSION, chrome, theme
+from .. import APP_VERSION, theme
 from ..config import config
 from ..maker import Maker
 from ..state import ALL, AppState
+from .admin import AiSettingsPage, CalendarPage, PipelinePage, TokensPage, UsersPage
 from .applications import ApplicationsPage
 from .home import HomePage
 from .profiles import ProfilesPage
@@ -21,8 +22,10 @@ from .settings import SettingsPage
 from .icons import icon, pixmap
 from .widgets import Banner, Dot, app_icon, button, icon_button, label
 
-ADMIN_LINKS = [("Users", "/users", "users"), ("Tokens", "/tokens", "key"), ("AI settings", "/ai-settings", "sparkles"),
-               ("Pipeline", "/pipeline", "kanban"), ("Calendar", "/calendar", "calendar")]
+# Admin pages, all inside the app: (key, menu text, icon, page class).
+ADMIN_PAGES = [("users", "Users", "users", UsersPage), ("tokens", "Tokens", "key", TokensPage),
+               ("ai", "AI settings", "sparkles", AiSettingsPage), ("pipeline", "Pipeline", "kanban", PipelinePage),
+               ("calendar", "Calendar", "calendar", CalendarPage)]
 
 
 class MainWindow(QMainWindow):
@@ -66,6 +69,9 @@ class MainWindow(QMainWindow):
         self.settings = SettingsPage(state)
         self.pages = {"home": self.home, "applications": self.applications, "maker": self.maker_page,
                       "profiles": self.profiles, "settings": self.settings}
+        if self.state.session.is_admin:
+            for key, _text, _icon, page_class in ADMIN_PAGES:
+                self.pages[key] = page_class(state)
         for page in self.pages.values():
             self.stack.addWidget(page)
 
@@ -126,14 +132,16 @@ class MainWindow(QMainWindow):
             self.nav_icons[key] = icon_name
             lay.addWidget(btn)
 
-        self.admin_buttons: list[tuple[QPushButton, str]] = []
         if self.state.session.is_admin:
             lay.addWidget(label("ADMIN", "NavSection"))
-            for text, path, icon_name in ADMIN_LINKS:
-                btn = button(f"  {text}", "NavButton", lambda _=False, p=path: chrome.open_url(self.state.session.server + p),
-                             "Opens on the website (admin pages move into the app later)")
+            for key, text, icon_name, _page in ADMIN_PAGES:
+                btn = button(f"  {text}", "NavButton", lambda _=False, k=key: self.go(k))
+                btn.setCheckable(True)
                 btn.setIconSize(QSize(18, 18))
-                self.admin_buttons.append((btn, icon_name))
+                btn.toggled.connect(lambda _on: self._paint_nav())
+                self.nav.addButton(btn)
+                self.nav_buttons[key] = btn
+                self.nav_icons[key] = icon_name
                 lay.addWidget(btn)
 
         lay.addStretch(1)
@@ -157,8 +165,6 @@ class MainWindow(QMainWindow):
         c = theme.colors()
         for key, btn in self.nav_buttons.items():
             btn.setIcon(icon(self.nav_icons[key], c["accent"] if btn.isChecked() else c["text"], 18))
-        for btn, icon_name in self.admin_buttons:
-            btn.setIcon(icon(icon_name, c["text"], 18))
 
     def _topbar(self) -> QWidget:
         bar = QFrame()

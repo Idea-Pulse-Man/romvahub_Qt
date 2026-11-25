@@ -136,6 +136,10 @@ class Session:
         return self.mode == "account" and bool(self.user) and self.user.get("role") == "admin"
 
     @property
+    def is_super_admin(self) -> bool:
+        return self.is_admin and bool(self.user.get("superAdmin"))
+
+    @property
     def display_name(self) -> str:
         if self.mode == "token":
             return "Token mode"
@@ -146,7 +150,12 @@ class Session:
 
     @property
     def role_label(self) -> str:
-        return "Admin" if self.is_admin else "Bidder"
+        """Super Admin, Admin, or a User's kind: Bidder or Caller."""
+        if self.is_super_admin:
+            return "Super Admin"
+        if self.is_admin:
+            return "Admin"
+        return "Caller" if (self.user or {}).get("kind") == "caller" else "Bidder"
 
 
 class Api:
