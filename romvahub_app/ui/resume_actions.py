@@ -13,8 +13,8 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QMenu, QMessageBox, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QDialog, QDialogButtonBox, QFrame, QHBoxLayout, QHeaderView, QMenu, QMessageBox,
+    QPlainTextEdit, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .. import tasks, theme
@@ -201,13 +201,21 @@ class ResumeCheckCard(Card):
         row = QHBoxLayout()
         row.setSpacing(8)
         self.check_btn = with_icon(button("Check all Resumes", "Primary", self.run_check), "check", "accent_fg")
+        self.ignore_btn = with_icon(button("Ignore list", "", self.edit_ignore,
+                                           "Words and phrases the check never flags (a company name, "
+                                           "a [bracket] the job really has, or part of a reason)"), "sliders")
         self.remake_btn = with_icon(button("Remake flagged", "", self.remake_flagged), "refresh")
+        self.stop_btn = with_icon(button("Stop remakes", "", self.stop_remakes,
+                                         "Take back every remake that is waiting (the old Resumes stay)"), "stop")
+        self.stop_btn.hide()
         self.review_btn = button("Review flagged one by one", "", self.review_flagged,
                                  "See each flagged Resume and decide: Looks fine, Remake or Delete")
         self.review_all_btn = button("Review all Ready", "", self.review_all,
                                      "Go through every Ready Resume one by one")
         row.addWidget(self.check_btn)
+        row.addWidget(self.ignore_btn)
         row.addWidget(self.remake_btn)
+        row.addWidget(self.stop_btn)
         row.addWidget(self.review_btn)
         row.addWidget(self.review_all_btn)
         row.addStretch(1)
@@ -249,6 +257,10 @@ class ResumeCheckCard(Card):
         state.profile_changed.connect(lambda _p: self.reload() if self._loaded else None)
         state.data_changed.connect(lambda: self.reload() if self._loaded and self.isVisible() else None)
         maker.made.connect(lambda _c: self.reload() if self._loaded else None)
+        maker.job_changed.connect(lambda _j: self._fill() if self._loaded and self.items else None)
+        self.ignore: list[str] = []
+        self.can_edit_ignore = False
+        self.remaking = 0
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -269,6 +281,14 @@ class ResumeCheckCard(Card):
         api = self.state.api
         tasks.run(lambda: api.request("GET", "/api/resume-check/summary", params=params, profile_id=token_profile),
                   self._show, self._failed, owner=self)
+        tasks.run(lambda: api.request("GET", "/api/resume-check/settings", profile_id=token_profile),
+                  self._show_settings, lambda _e: None, owner=self)
+
+    def _show_settings(self, data: dict) -> None:
+        data = data or {}
+        self.ignore = list(data.get("ignore") or [])
+        self.can_edit_ignore = bool(data.get("canEdit"))
+        self.ignore_btn.setText(f"Ignore list ({len(self.ignore)})" if self.ignore else "Ignore list")
 
     def _failed(self, error: Exception) -> None:
         status = getattr(error, "status", 0)
@@ -292,6 +312,10 @@ class ResumeCheckCard(Card):
         waiting = [i for i in self.items if not i.get("remakeRequested")]
         self.remake_btn.setText(f"Remake {len(waiting)} flagged" if waiting else "Remake flagged")
         self.remake_btn.setEnabled(bool(waiting))
+        self.remaking = int(data.get("remaking") or len([i for i in self.items if i.get("remakeRequested")]))
+        self.stop_btn.setText(f"Stop {self.remaking} remake{'s' if self.remaking != 1 else ''}"
+                              if self.remaking else "Stop remakes")
+        self.stop_btn.setVisible(bool(self.remaking))
         self.review_btn.setEnabled(bool(self.items))
         self.check_btn.setText("Check all Resumes" if data.get("total") else "Check all Resumes")
         self._fill()
@@ -346,6 +370,8 @@ class ResumeCheckCard(Card):
             lay.addWidget(label("Remaking…", "Accent"))
         elif item.get("remakeRequested"):
             lay.addWidget(label("In queue", "Muted"))
+            lay.addWidget(icon_button("x", "Take this remake back (the old Resume stays)",
+                                      lambda _=False, b=bid: cancel_remake(self, self.state, b, self.reload)))
         else:
             btn = button("Remake", "", lambda _=False, b=bid: remake(self, self.state, bids=[b],
                                                                        on_done=lambda _n: self.reload()))
@@ -404,6 +430,94 @@ class ResumeCheckCard(Card):
                 "until each new one is saved.") != QMessageBox.Yes:
             return
         remake(self, self.state, flagged=True, on_done=lambda n: (self._note(f"{n} queued for a remake."), self.reload()))
+
+    def stop_remakes(self) -> None:
+        """Take back every waiting remake; the one being remade now can stop the Resume Maker too."""
+        job = self.maker.job if self.maker.running else None
+        now = next((i for i in self.items if job and str(job.number) == str(i.get("number"))
+                    and i.get("remakeRequested")), None)
+        n = self.remaking
+        box = QMessageBox(self)
+        box.setWindowTitle("Stop remakes")
+        box.setIcon(QMessageBox.Question)
+        text = (f"Take back {n} remake{'s' if n != 1 else ''}? Their old Resumes and cover letters stay, "
+                "and they stay flagged until you remake them or press Looks fine.")
+        if now:
+            text += (f"\n\n#{now.get('number')} {now.get('company', '')} is being remade right now. "
+                     "Stop the Resume Maker too so it isn't finished? (Start it again on the Resume Maker page.)")
+        box.setText(text)
+        both = box.addButton("Stop remakes and the Maker", QMessageBox.AcceptRole) if now else None
+        only = box.addButton("Stop remakes", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(only)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is not only and (both is None or clicked is not both):
+            return
+        stop_maker = both is not None and clicked is both
+        params, token_profile = self._scope()
+        self.stop_btn.setEnabled(False)
+
+        def done(result):
+            self.stop_btn.setEnabled(True)
+            if stop_maker and self.maker.running:
+                self.maker.stop()
+            stopped = int((result or {}).get("stopped", 0))
+            self._note(f"Stopped: {stopped} remake{'s' if stopped != 1 else ''} taken back."
+                       + (" The Resume Maker is stopped." if stop_maker else ""))
+            self.state.data_changed.emit()
+            self.reload()
+
+        def failed(error):
+            self.stop_btn.setEnabled(True)
+            QMessageBox.warning(self, "Stop remakes", _message(error))
+
+        tasks.run(lambda: self.state.api.request("DELETE", "/api/resume-check/remake", params=params,
+                                                 profile_id=token_profile),
+                  done, failed, owner=self)
+
+    def edit_ignore(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Resume check: ignore list")
+        dlg.setMinimumWidth(520)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(20, 18, 20, 16)
+        lay.setSpacing(10)
+        lay.addWidget(label(
+            "One word or phrase per line. A placeholder or a reason that has one of them (as a whole word, any "
+            "case) is not flagged. For example:\n"
+            "    C1  —  a company name the check gets wrong\n"
+            "    [Remote]  —  a bracket the job title really has\n"
+            "    never names  —  skip the \"cover letter never names …\" rule\n"
+            "    another email  —  skip the \"another email is on it\" rule", "Muted", wrap=True))
+        edit = QPlainTextEdit("\n".join(self.ignore))
+        edit.setPlaceholderText("C1\n[Remote]")
+        edit.setMinimumHeight(200)
+        edit.setReadOnly(not self.can_edit_ignore)
+        lay.addWidget(edit)
+        if not self.can_edit_ignore:
+            lay.addWidget(label("Only an admin can change this list.", "Faint"))
+            buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        else:
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            ok = buttons.button(QDialogButtonBox.Ok)
+            ok.setText("Save and check all")
+            ok.setObjectName("Primary")
+            buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        lay.addWidget(buttons)
+        if dlg.exec() != QDialog.Accepted or not self.can_edit_ignore:
+            return
+        ignore = [line.strip() for line in edit.toPlainText().splitlines() if line.strip()]
+        _params, token_profile = self._scope()
+
+        def saved(result):
+            self._show_settings({"ignore": (result or {}).get("ignore", ignore), "canEdit": True})
+            self.run_check()
+
+        tasks.run(lambda: self.state.api.request("PUT", "/api/resume-check/settings", json_body={"ignore": ignore},
+                                                 profile_id=token_profile),
+                  saved, lambda e: QMessageBox.warning(self, "Ignore list", _message(e)), owner=self)
 
 
 def theme_color(value: str):
