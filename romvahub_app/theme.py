@@ -193,6 +193,25 @@ QMenu::item:selected {{ background: {c['hover']}; }}
 QMenu::item:disabled {{ color: {c['faint']}; }}
 QMenu::separator {{ height: 1px; background: {c['border']}; margin: 5px 8px; }}
 
+/* Profiles: cards and the editor's section cards */
+#ProfileCard {{ background: {c['surface']}; border: 1px solid {c['border']}; border-radius: 14px; }}
+#ProfileCard:hover {{ border-color: {c['border_strong']}; }}
+#NewCard {{ background: transparent; border: 2px dashed {c['border_strong']}; border-radius: 14px; }}
+#NewCard:hover {{ border-color: {c['accent']}; }}
+#PlusBubble, #IconBubble {{ background: {c['accent_soft']}; border-radius: 17px; }}
+#PlusBubble {{ border-radius: 24px; }}
+#CardName {{ font-size: 11.5pt; font-weight: 700; }}
+#SectionTitle {{ font-size: 13pt; font-weight: 700; }}
+#FieldLabel {{ font-weight: 600; font-size: 9.5pt; }}
+#Section {{ background: {c['surface']}; border: 1px solid {c['border']}; border-radius: 14px; }}
+#Entry {{ background: {c['bg']}; border: 1px solid {c['border']}; border-radius: 10px; }}
+QProgressBar#Completion {{ background: {c['hover']}; border: none; border-radius: 3px; }}
+QProgressBar#Completion::chunk {{ background: {c['accent']}; border-radius: 3px; }}
+QPushButton#RoundButton {{ padding: 0; min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; border-radius: 14px; border: 1px dashed {c['border_strong']}; background: transparent; }}
+QPushButton#RoundButton:hover {{ border-color: {c['accent']}; }}
+QTabWidget#LineTabs::pane {{ border: none; border-top: 1px solid {c['border']}; background: transparent; }}
+QTabWidget#LineTabs QTabBar {{ qproperty-drawBase: 0; border-bottom: 1px solid {c['border']}; }}
+
 QScrollArea {{ border: none; background: transparent; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}

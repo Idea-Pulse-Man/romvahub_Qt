@@ -177,7 +177,7 @@ class Api:
 
     # ------------------------------------------------------------------ low level
     def _send(self, method: str, path: str, *, bearer: str | None = None, params=None, json_body=None,
-              cookies: dict | None = None, timeout: float | None = None) -> httpx.Response:
+              cookies: dict | None = None, timeout: float | None = None, files=None) -> httpx.Response:
         headers = {}
         if bearer:
             headers["Authorization"] = f"Bearer {bearer}"
@@ -186,7 +186,7 @@ class Api:
         started = time.monotonic()
         try:
             response = self._http.request(
-                method, path, params=params, json=json_body, headers=headers,
+                method, path, params=params, json=json_body, headers=headers, files=files,
                 timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT,
             )
         except httpx.HTTPError as error:
@@ -254,10 +254,11 @@ class Api:
                 self._refresh_locked()
 
     def request(self, method: str, path: str, *, params=None, json_body=None, profile_id: str | None = None,
-                raw: bool = False, timeout: float | None = None) -> Any:
+                raw: bool = False, timeout: float | None = None, files=None) -> Any:
         for attempt in (1, 2):
             bearer = self._bearer(profile_id)
-            response = self._send(method, path, bearer=bearer, params=params, json_body=json_body, timeout=timeout)
+            response = self._send(method, path, bearer=bearer, params=params, json_body=json_body, timeout=timeout,
+                                  files=files)
             if response.status_code == 401 and self.session.mode == "account" and attempt == 1:
                 with self.session._lock:
                     self.session._access = None
@@ -395,6 +396,13 @@ class Api:
 
     def save_profile(self, profile_id: str, body: dict) -> dict:
         return self.request("PUT", f"/api/profiles/{profile_id}", json_body=body, profile_id=profile_id)
+
+    def file_bytes(self, url: str) -> bytes:
+        """A stored photo by its signed link (`/api/files/…`, no sign-in needed)."""
+        response = self._send("GET", url)
+        if response.status_code >= 400:
+            raise ApiError(response.status_code, _error_message(response))
+        return response.content
 
     def prompts(self, profile_id: str) -> dict:
         return self.request("GET", f"/api/profiles/{profile_id}/prompts", profile_id=profile_id)

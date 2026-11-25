@@ -229,8 +229,11 @@ class UsersPage(_Page):
 
     def _selection(self) -> None:
         user = self._current()
-        for btn in (self.edit_btn, self.profiles_btn, self.history_btn):
+        for btn in (self.edit_btn, self.history_btn):
             btn.setEnabled(bool(user))
+        self.profiles_btn.setEnabled(bool(user) and user.get("role") != "admin")
+        self.profiles_btn.setToolTip("Admins work on every Profile." if user and user.get("role") == "admin"
+                                     else "Which Profiles this user works on")
         plain = bool(user) and user.get("role") != "admin" and not self._is_me(user)
         self.suspend_btn.setEnabled(plain)
         self.delete_btn.setEnabled(plain)
@@ -372,9 +375,6 @@ class UsersPage(_Page):
     def _profiles_dialog(self, user: dict, profiles: list[dict], shared) -> None:
         shared_ids = {p.get("id") if isinstance(p, dict) else p for p in (shared or [])}
         dlg, lay = _dialog(self, f"Profiles for {user.get('email', '')}")
-        if user.get("role") == "admin":
-            lay.addWidget(label("Admins work on every Profile already. This list matters once they are a Bidder "
-                                "or Caller.", "Muted", wrap=True))
         lay.addWidget(label("Tick the Profiles this user works on.", "Muted", wrap=True))
         box = QListWidget()
         for p in profiles or []:
