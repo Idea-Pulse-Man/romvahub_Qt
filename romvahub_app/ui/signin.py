@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from .. import APP_VERSION, tasks, vault
 from ..api import Api, ApiError, MfaRequired, Session, TokenProfile, mask_token
 from ..config import config
-from .widgets import Card, Segmented, app_icon, button, label
+from .widgets import Card, Segmented, app_icon, brand_mark, button, label
 
 
 class SignInWindow(QWidget):
@@ -45,9 +45,7 @@ class SignInWindow(QWidget):
         outer.addLayout(row)
         outer.addStretch(1)
 
-        mark = label("r", "BrandMark")
-        mark.setFixedSize(52, 52)
-        mark.setAlignment(Qt.AlignCenter)
+        mark = brand_mark(56)
         mark_row = QHBoxLayout()
         mark_row.addStretch(1)
         mark_row.addWidget(mark)

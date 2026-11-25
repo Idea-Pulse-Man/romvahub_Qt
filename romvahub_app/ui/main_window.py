@@ -20,7 +20,7 @@ from .profiles import ProfilesPage
 from .resume_maker import ResumeMakerPage
 from .settings import SettingsPage
 from .icons import icon, pixmap
-from .widgets import Banner, Dot, app_icon, button, icon_button, label
+from .widgets import Banner, Dot, app_icon, brand_mark, button, icon_button, label
 
 # Admin pages, all inside the app: (key, menu text, icon, page class).
 ADMIN_PAGES = [("users", "Users", "users", UsersPage), ("tokens", "Tokens", "key", TokensPage),
@@ -106,10 +106,7 @@ class MainWindow(QMainWindow):
         lay.setSpacing(3)
         brand = QHBoxLayout()
         brand.setSpacing(10)
-        mark = label("r", "BrandMark")
-        mark.setFixedSize(34, 34)
-        mark.setAlignment(Qt.AlignCenter)
-        brand.addWidget(mark)
+        brand.addWidget(brand_mark(36))
         names = QVBoxLayout()
         names.setSpacing(0)
         names.addWidget(label("romva hub", "Brand"))

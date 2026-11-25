@@ -218,6 +218,14 @@ def _start_debug_log() -> None:
 
 
 def main() -> int:
+    if sys.platform == "win32":
+        # The taskbar shows the app's own icon (not python.exe's) when run as `python main.py`.
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Romva.RomvaHub")
+        except Exception:  # noqa: BLE001 - only the taskbar icon
+            pass
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)

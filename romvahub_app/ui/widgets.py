@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
@@ -11,8 +13,29 @@ from PySide6.QtWidgets import (
 from .. import theme
 
 
+LOGO = Path(__file__).resolve().parent.parent / "assets" / "logo.png"
+
+
+def logo_pixmap(size: int) -> QPixmap:
+    """The romva "R" at `size` px (sharp on high-DPI screens)."""
+    pix = QPixmap(str(LOGO))
+    if pix.isNull():
+        return app_icon_painted(size).pixmap(size, size)
+    ratio = 2.0
+    pix = pix.scaled(int(size * ratio), int(size * ratio), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    pix.setDevicePixelRatio(ratio)
+    return pix
+
+
 def app_icon(size: int = 64) -> QIcon:
-    """The app's mark: a blue rounded square with an "r"."""
+    """The app's icon: the romva "R" logo."""
+    if LOGO.exists():
+        return QIcon(str(LOGO))
+    return app_icon_painted(size)
+
+
+def app_icon_painted(size: int = 64) -> QIcon:
+    """Fallback mark (no logo file): a blue rounded square with an "r"."""
     pix = QPixmap(size, size)
     pix.fill(Qt.transparent)
     p = QPainter(pix)
@@ -27,6 +50,15 @@ def app_icon(size: int = 64) -> QIcon:
     p.drawText(QRectF(0, -size * 0.04, size, size), Qt.AlignCenter, "r")
     p.end()
     return QIcon(pix)
+
+
+def brand_mark(size: int = 34) -> QLabel:
+    """The logo for the sidebar and the sign-in window."""
+    mark = QLabel()
+    mark.setFixedSize(size, size)
+    mark.setAlignment(Qt.AlignCenter)
+    mark.setPixmap(logo_pixmap(size))
+    return mark
 
 
 def label(text: str = "", name: str = "", wrap: bool = False) -> QLabel:
