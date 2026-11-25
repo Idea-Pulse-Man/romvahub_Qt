@@ -202,8 +202,14 @@ class ResumeCheckCard(Card):
         row.setSpacing(8)
         self.check_btn = with_icon(button("Check all Resumes", "Primary", self.run_check), "check", "accent_fg")
         self.remake_btn = with_icon(button("Remake flagged", "", self.remake_flagged), "refresh")
+        self.review_btn = button("Review flagged one by one", "", self.review_flagged,
+                                 "See each flagged Resume and decide: Looks fine, Remake or Delete")
+        self.review_all_btn = button("Review all Ready", "", self.review_all,
+                                     "Go through every Ready Resume one by one")
         row.addWidget(self.check_btn)
         row.addWidget(self.remake_btn)
+        row.addWidget(self.review_btn)
+        row.addWidget(self.review_all_btn)
         row.addStretch(1)
         row.addWidget(icon_button("refresh", "Refresh the list", self.reload))
         self.body.addLayout(row)
@@ -286,6 +292,7 @@ class ResumeCheckCard(Card):
         waiting = [i for i in self.items if not i.get("remakeRequested")]
         self.remake_btn.setText(f"Remake {len(waiting)} flagged" if waiting else "Remake flagged")
         self.remake_btn.setEnabled(bool(waiting))
+        self.review_btn.setEnabled(bool(self.items))
         self.check_btn.setText("Check all Resumes" if data.get("total") else "Check all Resumes")
         self._fill()
 
@@ -373,6 +380,18 @@ class ResumeCheckCard(Card):
         tasks.run(lambda: self.state.api.request("POST", "/api/resume-check/run", json_body=body,
                                                  profile_id=token_profile, timeout=600),
                   done, failed, owner=self)
+
+    def review_flagged(self) -> None:
+        from .review import ReviewDialog
+
+        if self.items:
+            ReviewDialog(self.state, [self._bid(i) for i in self.items], 0, self, "Review flagged Resumes").exec()
+            self.reload()
+
+    def review_all(self) -> None:
+        from .review import open_review
+
+        open_review(self, self.state, {"statuses": ["Draft"], "hasResume": "true"}, "Review Ready Resumes")
 
     def remake_flagged(self) -> None:
         waiting = [i for i in self.items if not i.get("remakeRequested")]

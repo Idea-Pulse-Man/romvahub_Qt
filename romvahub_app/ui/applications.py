@@ -65,6 +65,9 @@ class ApplicationsPage(QWidget):
         self._search_timer.timeout.connect(lambda: self.reload(reset_page=True))
         self.refresh_btn = icon_button("refresh", "Refresh", lambda: self.reload())
         head.addWidget(self.refresh_btn, 0, Qt.AlignTop)
+        self.review_btn = button("Review one by one", "", self._review,
+                                 "Go through this tab's Resumes one by one: Looks fine, Remake or Delete")
+        head.addWidget(self.review_btn, 0, Qt.AlignTop)
         self.add_btn = button("Add job", "", self._add_job, "Add a job by hand (opens the website form)")
         head.addWidget(self.add_btn, 0, Qt.AlignTop)
         lay.addLayout(head)
@@ -315,6 +318,12 @@ class ApplicationsPage(QWidget):
         with_icon(self.download_btn, "download")
         with_icon(self.apply_all_btn, "play", "accent_fg", 11)
         with_icon(self.refresh_btn, "refresh", "text", 16)
+
+    def _review(self) -> None:
+        from .review import open_review
+
+        title = next((t for key, t, _q in TABS if key == self.tab), "Applications")
+        open_review(self, self.state, self._query(), f"Review · {title}")
 
     def _add_job(self) -> None:
         chrome.open_url(f"{self.state.session.server}/applications/new")
