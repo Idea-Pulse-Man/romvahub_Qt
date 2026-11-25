@@ -20,10 +20,10 @@ from .doc_viewer import DocViewer
 from .icons import pixmap
 from .widgets import Chip, CountTabs, Toast, button, icon_button, label, page_header, with_icon
 
-COLUMNS = ["", "Company", "Role", "Location", "Found", "Status", "Resume", "Cover letter", "Actions"]
+COLUMNS = ["", "No.", "Company", "Role", "Location", "Found", "Status", "Resume", "Cover letter", "Actions"]
 # Fixed columns (px) and how the rest of the width is shared by the text columns.
-FIXED = {"": 44, "Found": 76, "Status": 168, "Resume": 112, "Cover letter": 116, "Actions": 182}
-CENTERED = {"", "Found", "Status", "Resume", "Cover letter", "Actions"}
+FIXED = {"": 44, "No.": 52, "Found": 76, "Status": 168, "Resume": 112, "Cover letter": 116, "Actions": 182}
+CENTERED = {"", "No.", "Found", "Status", "Resume", "Cover letter", "Actions"}
 SHARE = {"Company": 1.0, "Profile": 0.75, "Role": 1.45, "Location": 1.0}
 MINIMUM = {"Company": 120, "Profile": 90, "Role": 140, "Location": 100}
 
@@ -335,7 +335,7 @@ class ApplicationsPage(QWidget):
         show_profile = not self.state.profile_id and self.state.session.mode == "account"
         cols = list(COLUMNS)
         if show_profile:
-            cols.insert(2, "Profile")
+            cols.insert(cols.index("Company") + 1, "Profile")
         self.table.clear()
         self.table.setColumnCount(len(cols))
         for i, name in enumerate(cols):
@@ -376,6 +376,11 @@ class ApplicationsPage(QWidget):
             cb.toggled.connect(lambda on, i=bid_id: self._toggle(i, on))
             bl.addWidget(cb)
         self.table.setCellWidget(r, col[""], box)
+
+        # Position in the list (1, 2, 3, … continuing across pages), not the job's own number.
+        order = self._item(str((self.page - 1) * config.page_size + r + 1), c["muted"])
+        order.setTextAlignment(Qt.AlignCenter)
+        self.table.setItem(r, col["No."], order)
 
         who = QWidget()
         wl = QVBoxLayout(who)
