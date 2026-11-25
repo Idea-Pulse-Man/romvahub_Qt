@@ -28,6 +28,9 @@ _log = logging.getLogger("romvahub.maker")
 LINE = re.compile(r"^(\S+)\s+(INFO|WARN|ERROR)\s+(.*)$")
 MAKING = re.compile(r"^Making #(\S+) (.+?) — (.+)$")
 MAKING_LETTER = re.compile(r"^Making the cover letter for #(\S+) (.+?) — (.+)$")
+# The agent's sign-in is renewed every 5 minutes (self._renew): each token it is
+# given must outlast the wait for the next one, with room to spare.
+AGENT_TOKEN_MIN_LEFT_S = 7 * 60
 
 
 @dataclass
@@ -120,7 +123,7 @@ class Maker(QObject):
                 if not token:
                     raise RuntimeError("Add a Profile token first (Settings → Connection).")
                 return token
-            return api.access_token()
+            return api.access_token(AGENT_TOKEN_MIN_LEFT_S)
 
         tasks.run(get_token, lambda token: self._launch(token, session.mode == "account"),
                   lambda error: self.problem.emit(str(getattr(error, "message", error))), owner=self)
@@ -183,8 +186,8 @@ class Maker(QObject):
             if self.proc is not None and self.running:
                 self.proc.write(f"token {token}\n".encode())
 
-        tasks.run(api.access_token, send, lambda e: self._emit_line("WARN", f"Could not renew the agent's sign-in: {e}"),
-                  owner=self)
+        tasks.run(lambda: api.access_token(AGENT_TOKEN_MIN_LEFT_S), send,
+                  lambda e: self._emit_line("WARN", f"Could not renew the agent's sign-in: {e}"), owner=self)
 
     # ------------------------------------------------------------------ install
     def install(self) -> None:

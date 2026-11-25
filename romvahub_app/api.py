@@ -326,8 +326,18 @@ class Api:
         s.user = None
         vault.forget_refresh_token(s.server)
 
-    def access_token(self) -> str:
-        """A current access token (account mode), for the Resume Maker."""
+    def access_token(self, min_left: float = 0) -> str:
+        """
+        A current access token (account mode), for the Resume Maker. `min_left`:
+        renewed first unless it is good for that many seconds more — the agent
+        keeps the token it is given until the next one, minutes later, and one
+        that ran out in between refused a finished Resume (2026-11-25, Brigit).
+        """
+        s = self.session
+        if s.mode == "account" and min_left > 0:
+            with s._lock:
+                if not s._access or s._access_exp - time.time() < min_left:
+                    self._refresh_locked()
         return self._bearer(None)
 
     def check_token(self, token: str) -> dict:
