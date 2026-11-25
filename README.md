@@ -36,6 +36,29 @@ You need:
   **Install / Update** on the Resume Maker screen.
 - For Apply: Google Chrome with the **Romva Apply (Alt+V)** extension (`../altv`, 3.5.7 or newer), signed in.
 
+## Build for bidders and the VPS (one folder, nothing to install)
+
+```powershell
+cd romvahub
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+It makes `dist\RomvaHub\` and `dist\RomvaHub.zip` (about 85 MB):
+
+| Inside | What it is |
+|---|---|
+| `RomvaHub.exe` | The app, with Python and Qt inside |
+| `agent\node.exe` | Node.js for the Resume Maker |
+| `agent\src`, `agent\node_modules` | The Resume agent (`../resume_agent`), already installed |
+
+Copy the folder (or unzip the zip) to any Windows PC and run `RomvaHub.exe`. The bidder only signs in: to romva
+in the app, and once to ChatGPT / Claude / Gemini in the agent's Chrome window. The Resume Maker uses the
+built-in agent automatically: no folder to choose, no Install / Update. It needs Google Chrome or Microsoft Edge
+(Edge comes with Windows 10/11). Rebuild after changing the app or `resume_agent`.
+
+The build PC needs Python, Node.js and npm. `run_pyinstaller.py` works around a bug in Python 3.10.0 that
+otherwise stops PyInstaller.
+
 ## Where things are kept
 
 | What | Where |
@@ -48,7 +71,7 @@ You need:
 
 - **Apply** opens `<server>/applications#romva-apply=<ids>` in Chrome. The Alt+V extension picks this up, opens each
   job in its own tab and fills the form. The bidder submits, and the row is marked Applied (with Undo).
-- **Resume Maker** runs `node resume_agent/src/agent.js`:
+- **Resume Maker** runs `node resume_agent/src/agent.js` (in the built app: `agent\node.exe agent\src\agent.js`):
   - In token mode it uses the chosen Profile's token.
   - In account mode it uses the app's 15-minute sign-in, and the app sends it a renewed one on stdin
     (`ROMVA_TOKEN_STDIN=1`).
