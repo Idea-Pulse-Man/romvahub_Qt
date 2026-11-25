@@ -18,7 +18,7 @@ from PySide6.QtCore import QSettings
 from . import APP_ID, ORG_NAME
 
 DEFAULT_SERVER = "https://www.romva.space"
-PAGE_SIZES = (5, 10, 100)
+PAGE_SIZES = (5, 10, 25, 50, 100)
 DEFAULT_PAGE_SIZE = 5
 AI_SITES = (("chatgpt", "ChatGPT", "chatgpt.com"), ("claude", "Claude", "claude.ai"), ("gemini", "Gemini", "gemini.google.com"))
 

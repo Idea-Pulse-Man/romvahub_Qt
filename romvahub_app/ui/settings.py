@@ -21,6 +21,10 @@ class SettingsPage(QWidget):
     sign_out = Signal()
     switch_method = Signal(str)
 
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.sizes.set_current(str(config.page_size))  # it can be changed under the Applications table too
+
     def __init__(self, state: AppState):
         super().__init__()
         self.setObjectName("Page")
@@ -93,12 +97,12 @@ class SettingsPage(QWidget):
         row = QHBoxLayout()
         text = QVBoxLayout()
         text.addWidget(label("Rows per page", ""))
-        text.addWidget(label("How many applications show on one page. Use Prev / Next under the table to see more. "
+        text.addWidget(label("How many applications show on one page. Also picked under the table. "
                              "Default is 5.", "Muted", wrap=True))
         row.addLayout(text, 1)
-        sizes = Segmented([(str(n), str(n)) for n in PAGE_SIZES], str(config.page_size))
-        sizes.changed.connect(lambda v: self._saved(setattr(config, "page_size", int(v))))
-        row.addWidget(sizes)
+        self.sizes = Segmented([(str(n), str(n)) for n in PAGE_SIZES], str(config.page_size))
+        self.sizes.changed.connect(lambda v: self._saved(setattr(config, "page_size", int(v))))
+        row.addWidget(self.sizes)
         apps.body.addLayout(row)
         lay.addWidget(apps)
 

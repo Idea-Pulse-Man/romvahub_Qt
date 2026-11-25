@@ -7,12 +7,12 @@ from pathlib import Path
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QIcon
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QMenu, QMessageBox,
+    QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QMenu, QMessageBox,
     QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .. import chrome, tasks, theme
-from ..config import config
+from ..config import PAGE_SIZES, config
 from ..statuses import GROUP_STARTS, STATUSES, TABS, display_status
 from ..state import AppState
 from .doc_viewer import DocViewer
@@ -133,9 +133,17 @@ class ApplicationsPage(QWidget):
         pager.setSpacing(6)
         self.page_info = label("", "Strong")
         pager.addWidget(self.page_info)
-        self.per_page = label("", "Muted")
+        pager.addSpacing(14)
+        pager.addWidget(label("Rows per page", "Muted"))
+        self.per_page = QComboBox()
+        self.per_page.setObjectName("PageSize")
+        for n in PAGE_SIZES:
+            self.per_page.addItem(str(n), n)
+        self.per_page.setCurrentIndex(max(0, self.per_page.findData(config.page_size)))
+        self.per_page.setToolTip("How many applications show on one page")
+        self.per_page.setCursor(Qt.PointingHandCursor)
+        self.per_page.activated.connect(self._pick_page_size)
         pager.addWidget(self.per_page)
-        pager.addWidget(button("change in Settings", "TextLink", self.open_settings.emit))
         pager.addStretch(1)
         self.prev_btn = button("Prev", "Page", lambda: self._go(self.page - 1))
         pager.addWidget(self.prev_btn)
@@ -178,6 +186,15 @@ class ApplicationsPage(QWidget):
         self.tab = tab
         self.checked.clear()
         self.reload(reset_page=True)
+
+    def _pick_page_size(self, _index: int) -> None:
+        size = int(self.per_page.currentData())
+        if size != config.page_size:
+            # Keep the first row in view: open the page that holds it at the new size.
+            first = (self.page - 1) * config.page_size
+            config.page_size = size
+            self.page = first // size + 1
+            self.reload()
 
     def _go(self, page: int) -> None:
         if 1 <= page <= self.total_pages and page != self.page:
@@ -323,7 +340,7 @@ class ApplicationsPage(QWidget):
         start = (self.page - 1) * config.page_size + 1 if self.rows else 0
         end = start + len(self.rows) - 1 if self.rows else 0
         self.page_info.setText(f"Showing {start}–{end} of {self.total:,}" if self.rows else "No applications")
-        self.per_page.setText(f"  {config.page_size} per page ·")
+        self.per_page.setCurrentIndex(max(0, self.per_page.findData(config.page_size)))
         self._render_pages()
         self._update_bulk()
         self._place_select_all()
