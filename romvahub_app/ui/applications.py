@@ -387,7 +387,6 @@ class ApplicationsPage(QWidget):
         name.setToolTip(name.text())
         self._company_labels.append((name, name.text()))
         wl.addWidget(name)
-        wl.addWidget(label(f"#{bid.get('number', '')}", "Faint"))
         self.table.setCellWidget(r, col["Company"], who)
         if show_profile:
             self.table.setItem(r, col["Profile"], self._item((bid.get("candidate") or {}).get("displayName", ""), c["muted"]))
