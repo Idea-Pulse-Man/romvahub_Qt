@@ -34,9 +34,9 @@ Assert-Ok 'pip install'
 
 Write-Host '2/4  RomvaHub.exe'
 # run_pyinstaller.py = PyInstaller, plus the fix for Python 3.10.0's dis bug.
-$assets = Join-Path $PSScriptRoot 'romvahub_appssets'
+$assets = Join-Path $PSScriptRoot 'romvahub_app\assets'
 & $python run_pyinstaller.py --noconfirm --clean --windowed --name RomvaHub `
-    --icon (Join-Path $assets 'romva.ico') --add-data "$assets;romvahub_appssets" `
+    --icon (Join-Path $assets 'romva.ico') --add-data "$assets;romvahub_app\assets" `
     --hidden-import keyring.backends.Windows `
     --distpath dist --workpath build --specpath build main.py
 Assert-Ok 'PyInstaller'
