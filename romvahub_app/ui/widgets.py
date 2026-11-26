@@ -264,6 +264,11 @@ class Segmented(QFrame):
         if key in self.buttons:
             self.buttons[key].setChecked(True)
 
+    @property
+    def current(self) -> str:
+        """The key of the button that is on."""
+        return next((key for key, btn in self.buttons.items() if btn.isChecked()), "")
+
 
 class Toast(QFrame):
     """A short message at the bottom of a page, with an optional Undo."""

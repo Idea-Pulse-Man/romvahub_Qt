@@ -5,8 +5,11 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout, QMessageBox, QPlainTextEdit, QScrollArea, QVBoxLayout,
+    QWidget,
 )
+
+from .. import tasks
 
 from ..config import (
     AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, MAKER_METHODS, bundled_agent_dir, config,
@@ -82,6 +85,9 @@ class ResumeMakerPage(QWidget):
         counts.addWidget(button("Make files…", "", self._make_files,
                                 "Make the Resume and cover letter files on the server for a date range and statuses"),
                          0, Qt.AlignBottom)
+        if state.session.is_admin:
+            counts.addWidget(button("Stop all", "", self._stop_all, "Stop the Resume Maker on every computer"),
+                             0, Qt.AlignBottom)
         control.body.addLayout(counts)
         left.addWidget(control)
 
@@ -328,9 +334,51 @@ class ResumeMakerPage(QWidget):
         self.problem.hide()
         if self.maker.running:
             self.maker.stop()
-        else:
-            profile = self.profile_pick.currentData() if self.state.session.mode == "token" else None
+            # This computer stops on the server too (its row in maker_computers).
+            body = {"running": False, "profileId": config.start_profile, "order": config.start_order}
+            tasks.run(lambda: self.state.api.request("PUT", self._computer_path(), json_body=body,
+                                                     profile_id=self._token_profile(config.start_profile)),
+                      None, lambda _e: None, owner=self)
+            return
+        # The Start window: one Profile, Up / Down and the start No., the method and the AIs.
+        from .start_window import StartWindow
+
+        window = StartWindow(self.state, self)
+        if window.exec() != QDialog.Accepted:
+            return
+        body = window.choice()
+        profile = self._token_profile(body["profileId"])
+
+        def saved(_row) -> None:
             self.maker.start(profile)
+
+        def failed(error) -> None:
+            self.problem.setText(f"Could not start: {getattr(error, 'message', error)}")
+            self.problem.show()
+
+        tasks.run(lambda: self.state.api.request("PUT", self._computer_path(), json_body=body, profile_id=profile),
+                  saved, failed, owner=self)
+
+    @staticmethod
+    def _computer_path() -> str:
+        from urllib.parse import quote
+
+        from ..maker import worker_name
+
+        return f"/api/auto-make/computers/{quote(worker_name(), safe='')}"
+
+    def _token_profile(self, profile_id: str | None) -> str | None:
+        """Token mode: the Profile whose token signs the request (and runs the agent)."""
+        return profile_id if self.state.session.mode == "token" else None
+
+    def _stop_all(self) -> None:
+        answer = QMessageBox.question(self, "Stop all", "Stop the Resume Maker on every computer?",
+                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer != QMessageBox.Yes:
+            return
+        tasks.run(lambda: self.state.api.request("POST", "/api/auto-make/stop-all"),
+                  lambda r: QMessageBox.information(self, "Stop all", f"Stopped {r.get('stopped', 0)} computer(s)."),
+                  lambda e: QMessageBox.warning(self, "Stop all", str(getattr(e, "message", e))), owner=self)
 
     def _open_doc(self, bid: dict, kind: str) -> None:
         from .doc_viewer import DocViewer

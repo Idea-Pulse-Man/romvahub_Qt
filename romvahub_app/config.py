@@ -141,12 +141,32 @@ class Config:
     # The Resume Maker: the method, and the AI for each part (keys of AI_SITES).
     @property
     def maker_method(self) -> str:
-        value = str(_get("maker_method", "two"))
-        return value if value in [m[0] for m in MAKER_METHODS] else "two"
+        # One step (ChatGPT · Chat · GPT-6 · High) unless chosen otherwise: the user's default, 2026-11-26.
+        value = str(_get("maker_method", "one"))
+        return value if value in [m[0] for m in MAKER_METHODS] else "one"
 
     @maker_method.setter
     def maker_method(self, value: str) -> None:
         _set("maker_method", value)
+
+    # The Start window's last choices on this computer: the Profile, and ▲ Up / ▼ Down.
+    @property
+    def start_profile(self) -> str | None:
+        value = _get("start_profile", "")
+        return str(value) if value else None
+
+    @start_profile.setter
+    def start_profile(self, value: str | None) -> None:
+        _set("start_profile", value or "")
+
+    @property
+    def start_order(self) -> str:
+        value = str(_get("start_order", "up"))
+        return value if value in ("up", "down") else "up"
+
+    @start_order.setter
+    def start_order(self, value: str) -> None:
+        _set("start_order", value)
 
     def _ai(self, key: str, default: str) -> str:
         value = str(_get(key, default))
