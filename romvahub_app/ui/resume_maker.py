@@ -7,7 +7,9 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from ..config import AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, bundled_agent_dir, config
+from ..config import (
+    AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, MAKER_METHODS, bundled_agent_dir, config,
+)
 from ..maker import Maker, node_path
 from ..state import AppState
 from .resume_actions import ResumeCheckCard
@@ -78,20 +80,40 @@ class ResumeMakerPage(QWidget):
         control.body.addLayout(counts)
         left.addWidget(control)
 
-        # The AI website, and which Profile in token mode.
+        # The method and the AI websites (then each one's model), and which Profile in token mode.
         ai = Card("AI website")
-        self.ai = Segmented([(key, f"{name}  ·  {site}") for key, name, site in AI_SITES], config.maker_ai)
-        self.ai.changed.connect(self._pick_ai)
-        ai.body.addWidget(self.ai)
-        ai.body.addWidget(label("The work happens in a small Chrome window that uses your own account on that site. "
+        sites = [(key, name) for key, name, _site in AI_SITES]
+        self.ai_rows = QWidget()
+        rows = QVBoxLayout(self.ai_rows)
+        rows.setContentsMargins(0, 0, 0, 0)
+        rows.setSpacing(8)
+        self.method = Segmented(list(MAKER_METHODS), config.maker_method)
+        self.method.changed.connect(lambda key: self._pick("maker_method", key))
+        rows.addLayout(self._row("Method", self.method)[0])
+        self.draft_ai = Segmented(sites, config.maker_draft_ai)
+        self.draft_ai.changed.connect(lambda key: self._pick("maker_draft_ai", key))
+        self.draft_row, self.draft_label = self._row("First AI", self.draft_ai)
+        rows.addLayout(self.draft_row)
+        self.ai = Segmented(sites, config.maker_ai)
+        self.ai.changed.connect(lambda key: self._pick("maker_ai", key))
+        self.ai_row, self.ai_label = self._row("AI", self.ai)
+        rows.addLayout(self.ai_row)
+        self.letter_ai = Segmented(sites, config.maker_letter_ai)
+        self.letter_ai.changed.connect(lambda key: self._pick("maker_letter_ai", key))
+        rows.addLayout(self._row("Cover letter", self.letter_ai)[0])
+        self.method_note = label("", "Muted", wrap=True)
+        rows.addWidget(self.method_note)
+        ai.body.addWidget(self.ai_rows)
+        ai.body.addWidget(label("The work happens in a small Chrome window that uses your own account on each site. "
                                 "Sign in there once.", "Muted", wrap=True))
-        # ChatGPT only: Chat / Work, the model and the thinking effort, chosen in every chat.
+        # ChatGPT (when it is used): Chat / Work, the model and the thinking effort, chosen in every chat.
         self.chatgpt_box = QWidget()
         gpt = QVBoxLayout(self.chatgpt_box)
         gpt.setContentsMargins(0, 4, 0, 0)
         gpt.setSpacing(8)
+        gpt.addWidget(label("ChatGPT", "Label"))
         mode_row = QHBoxLayout()
-        mode_row.addWidget(self._row_label("ChatGPT mode", "Label"))
+        mode_row.addWidget(self._row_label("Mode", "Label"))
         self.chatgpt_mode = Segmented(list(CHATGPT_MODES), config.chatgpt_mode)
         self.chatgpt_mode.changed.connect(self._pick_chatgpt_mode)
         mode_row.addWidget(self.chatgpt_mode)
@@ -119,8 +141,32 @@ class ResumeMakerPage(QWidget):
         self.chatgpt_note = label("", "Muted", wrap=True)
         gpt.addWidget(self.chatgpt_note)
         ai.body.addWidget(self.chatgpt_box)
+        # DeepSeek (when it is used): no model menu, its two switches.
+        self.deepseek_box = QWidget()
+        ds = QVBoxLayout(self.deepseek_box)
+        ds.setContentsMargins(0, 4, 0, 0)
+        ds.setSpacing(6)
+        ds.addWidget(label("DeepSeek", "Label"))
+        ds_row = QHBoxLayout()
+        self.deepthink = QCheckBox("DeepThink")
+        self.deepthink.setChecked(config.deepseek_deepthink)
+        self.deepthink.toggled.connect(lambda on: setattr(config, "deepseek_deepthink", on))
+        self.ds_search = QCheckBox("Search")
+        self.ds_search.setChecked(config.deepseek_search)
+        self.ds_search.toggled.connect(lambda on: setattr(config, "deepseek_search", on))
+        ds_row.addWidget(self.deepthink)
+        ds_row.addWidget(self.ds_search)
+        ds_row.addStretch(1)
+        ds.addLayout(ds_row)
+        ds.addWidget(label("DeepSeek has no model menu: these two switches are its choice, set in every chat.",
+                           "Muted", wrap=True))
+        ai.body.addWidget(self.deepseek_box)
+        # Claude and Gemini (when used): their default model, for now.
+        self.default_model_note = label("", "Muted", wrap=True)
+        ai.body.addWidget(self.default_model_note)
         self._filling_models = False
         self._fill_models()
+        self._show_ai_rows()
 
         self.profile_row = QHBoxLayout()
         self.profile_row.addWidget(label("Make for", "Label"))
@@ -240,8 +286,8 @@ class ResumeMakerPage(QWidget):
         self.toggle_btn.style().polish(self.toggle_btn)
         self.made.setText(str(self.maker.made_today))
         self.failed.setText(str(self.maker.failed_today))
-        self.ai.setEnabled(not running)
-        self.chatgpt_box.setEnabled(not running)
+        for widget in (self.ai_rows, self.chatgpt_box, self.deepseek_box):
+            widget.setEnabled(not running)
         self.profile_pick.setEnabled(not running)
         job = self.maker.job
         if job:
@@ -288,9 +334,39 @@ class ResumeMakerPage(QWidget):
         lab.setMinimumWidth(96)
         return lab
 
-    def _pick_ai(self, key: str) -> None:
-        config.maker_ai = key
-        self.chatgpt_box.setVisible(key == "chatgpt")
+    def _row(self, text: str, widget: QWidget):
+        """A labelled row: (its layout, its label)."""
+        row = QHBoxLayout()
+        lab = self._row_label(text, "Label")
+        row.addWidget(lab)
+        row.addWidget(widget)
+        row.addStretch(1)
+        return row, lab
+
+    def _pick(self, setting: str, key: str) -> None:
+        setattr(config, setting, key)
+        self._show_ai_rows()
+
+    def _show_ai_rows(self) -> None:
+        """The rows the method has, and the model choices of the AIs it uses."""
+        two = config.maker_method == "two"
+        for i in range(self.draft_row.count()):
+            widget = self.draft_row.itemAt(i).widget()
+            if widget:
+                widget.setVisible(two)
+        self.ai_label.setText("Second AI" if two else "AI")
+        self.method_note.setText(
+            "The first AI writes a draft of the resume; the second writes the resume from the same prompt and that "
+            "draft. The cover letter is one prompt." if two else
+            "One AI writes the resume from the prompt. The cover letter is one prompt.")
+        used = config.maker_ais_used()
+        self.chatgpt_box.setVisible("chatgpt" in used)
+        self.deepseek_box.setVisible("deepseek" in used)
+        others = [self.maker.site_name(key) for key in ("claude", "gemini") if key in used]
+        self.default_model_note.setText(
+            f"{' and '.join(others)}: {'their' if len(others) > 1 else 'its'} default model (no model choice yet)."
+            if others else "")
+        self.default_model_note.setVisible(bool(others))
 
     def _pick_chatgpt_mode(self, key: str) -> None:
         config.chatgpt_mode = key
@@ -307,7 +383,6 @@ class ResumeMakerPage(QWidget):
             self.chatgpt_model.setCurrentText(saved)
         finally:
             self._filling_models = False
-        self.chatgpt_box.setVisible(config.maker_ai == "chatgpt")
         self.chatgpt_note.setText(
             "Work chats are ordinary chats and stay in your ChatGPT history (ChatGPT has no Work mode in a "
             "temporary chat), and Work mode has no Web search switch. A model without the effort chosen gets the "

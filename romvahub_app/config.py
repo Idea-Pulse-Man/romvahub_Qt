@@ -20,7 +20,10 @@ from . import APP_ID, ORG_NAME
 DEFAULT_SERVER = "https://www.romva.space"
 PAGE_SIZES = (5, 10, 25, 50, 100)
 DEFAULT_PAGE_SIZE = 5
-AI_SITES = (("chatgpt", "ChatGPT", "chatgpt.com"), ("claude", "Claude", "claude.ai"), ("gemini", "Gemini", "gemini.google.com"))
+AI_SITES = (("chatgpt", "ChatGPT", "chatgpt.com"), ("deepseek", "DeepSeek", "chat.deepseek.com"),
+            ("claude", "Claude", "claude.ai"), ("gemini", "Gemini", "gemini.google.com"))
+# How a resume is made: one prompt (one AI), or two (the first AI writes a draft, the second the resume from it).
+MAKER_METHODS = (("one", "One prompt"), ("two", "Two prompts"))
 # ChatGPT's Chat / Work mode, the models its model menu lists in each (2026-11-26; any other name can be
 # typed), and the thinking effort. The Resume agent chooses them in every chat (resume_agent chat.js).
 CHATGPT_MODES = (("chat", "Chat"), ("work", "Work"))
@@ -135,14 +138,78 @@ class Config:
     def agent_dir(self, value: str) -> None:
         _set("agent_dir", value)
 
+    # The Resume Maker: the method, and the AI for each part (keys of AI_SITES).
+    @property
+    def maker_method(self) -> str:
+        value = str(_get("maker_method", "two"))
+        return value if value in [m[0] for m in MAKER_METHODS] else "two"
+
+    @maker_method.setter
+    def maker_method(self, value: str) -> None:
+        _set("maker_method", value)
+
+    def _ai(self, key: str, default: str) -> str:
+        value = str(_get(key, default))
+        return value if value in [a[0] for a in AI_SITES] else default
+
     @property
     def maker_ai(self) -> str:
-        value = str(_get("maker_ai", "chatgpt"))
-        return value if value in [a[0] for a in AI_SITES] else "chatgpt"
+        """The AI that writes the resume: the only one (one prompt), or the second (two prompts)."""
+        return self._ai("maker_ai", "chatgpt")
 
     @maker_ai.setter
     def maker_ai(self, value: str) -> None:
         _set("maker_ai", value)
+
+    @property
+    def maker_draft_ai(self) -> str:
+        """The first of two prompts: writes the draft."""
+        return self._ai("maker_draft_ai", "deepseek")
+
+    @maker_draft_ai.setter
+    def maker_draft_ai(self, value: str) -> None:
+        _set("maker_draft_ai", value)
+
+    @property
+    def maker_letter_ai(self) -> str:
+        """The AI that writes the cover letter (one prompt)."""
+        return self._ai("maker_letter_ai", "chatgpt")
+
+    @maker_letter_ai.setter
+    def maker_letter_ai(self, value: str) -> None:
+        _set("maker_letter_ai", value)
+
+    def maker_ais_used(self) -> set[str]:
+        """Every AI the Resume Maker asks, as chosen now."""
+        used = {self.maker_ai, self.maker_letter_ai}
+        if self.maker_method == "two":
+            used.add(self.maker_draft_ai)
+        return used
+
+    # DeepSeek has no model menu: its DeepThink and Search switches.
+    @property
+    def deepseek_deepthink(self) -> bool:
+        return _get("deepseek_deepthink", True)
+
+    @deepseek_deepthink.setter
+    def deepseek_deepthink(self, value: bool) -> None:
+        _set("deepseek_deepthink", bool(value))
+
+    @property
+    def deepseek_search(self) -> bool:
+        return _get("deepseek_search", True)
+
+    @deepseek_search.setter
+    def deepseek_search(self, value: bool) -> None:
+        _set("deepseek_search", bool(value))
+
+    def maker_models(self) -> dict:
+        """Each AI's own choices, for the Resume agent (its config.json "models")."""
+        mode = self.chatgpt_mode
+        return {
+            "chatgpt": {"mode": mode, "model": self.chatgpt_model(mode), "effort": self.chatgpt_effort},
+            "deepseek": {"deepThink": self.deepseek_deepthink, "search": self.deepseek_search},
+        }
 
     # ChatGPT's mode, model (one per mode: the two list different models) and thinking effort.
     @property

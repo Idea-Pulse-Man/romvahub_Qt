@@ -1,7 +1,8 @@
 """The Resume Maker: runs the Resume agent (resume_agent, Node.js) as a child process.
 
 The agent makes the Resume and cover letter for each new Draft with the
-bidder's own signed-in ChatGPT, Claude or Gemini (in its own Chrome window).
+bidder's own signed-in AI websites — ChatGPT, DeepSeek, Claude or Gemini, one or two
+prompts, as chosen on the Resume Maker page (in its own Chrome window).
 This app starts and stops it, hands it the sign-in, and reads its log:
 
 * Token mode — the agent runs as the chosen Profile's token.
@@ -10,6 +11,8 @@ This app starts and stops it, hands it the sign-in, and reads its log:
 """
 
 from __future__ import annotations
+
+import json
 
 import logging
 import re
@@ -133,10 +136,11 @@ class Maker(QObject):
         env = QProcessEnvironment.systemEnvironment()
         env.insert("ROMVA_TOKEN", token)
         env.insert("ROMVA_API_URL", config.server_url)
+        env.insert("ROMVA_METHOD", config.maker_method)
         env.insert("ROMVA_AI", config.maker_ai)
-        env.insert("ROMVA_CHATGPT_MODE", config.chatgpt_mode)
-        env.insert("ROMVA_CHATGPT_MODEL", config.chatgpt_model(config.chatgpt_mode))
-        env.insert("ROMVA_CHATGPT_EFFORT", config.chatgpt_effort)
+        env.insert("ROMVA_DRAFT_AI", config.maker_draft_ai)
+        env.insert("ROMVA_LETTER_AI", config.maker_letter_ai)
+        env.insert("ROMVA_MODELS", json.dumps(config.maker_models()))
         env.insert("ROMVA_AGENT_HOME", str(data_dir() / "agent"))
         if renewable:
             env.insert("ROMVA_TOKEN_STDIN", "1")
@@ -214,18 +218,37 @@ class Maker(QObject):
         proc.start(npm, ["install", "--omit=dev"])
 
     # ------------------------------------------------------------------ log
-    def ai_name(self) -> str:
+    @staticmethod
+    def site_name(key: str) -> str:
         from .config import AI_SITES
 
-        return next((name for key, name, _ in AI_SITES if key == config.maker_ai), "ChatGPT")
+        return next((name for k, name, _ in AI_SITES if k == key), "ChatGPT")
+
+    def ai_name(self) -> str:
+        """The AIs that make the resume: "ChatGPT", or "DeepSeek → ChatGPT" (two prompts)."""
+        if config.maker_method == "two":
+            return f"{self.site_name(config.maker_draft_ai)} → {self.site_name(config.maker_ai)}"
+        return self.site_name(config.maker_ai)
+
+    def _with_choices(self, key: str) -> str:
+        """An AI with its own choices: "ChatGPT (Work · GPT-6 Sol · High)", "DeepSeek (DeepThink, Search)"."""
+        name = self.site_name(key)
+        if key == "chatgpt":
+            mode = config.chatgpt_mode
+            parts = (mode.capitalize(), config.chatgpt_model(mode), config.chatgpt_effort.capitalize())
+            return f"{name} ({' · '.join(p for p in parts if p)})"
+        if key == "deepseek":
+            on = [n for n, v in (("DeepThink", config.deepseek_deepthink), ("Search", config.deepseek_search)) if v]
+            return f"{name} ({', '.join(on) if on else 'DeepThink and Search off'})"
+        return name
 
     def ai_details(self) -> str:
-        """The AI website, and for ChatGPT its mode, model and effort: "ChatGPT · Work · GPT-6 Sol · High"."""
-        if config.maker_ai != "chatgpt":
-            return self.ai_name()
-        mode = config.chatgpt_mode
-        return " · ".join(part for part in (self.ai_name(), mode.capitalize(), config.chatgpt_model(mode),
-                                            config.chatgpt_effort.capitalize()) if part)
+        """For the log: the method, each AI with its choices, and the cover letter's AI."""
+        if config.maker_method == "two":
+            resume = f"two prompts: {self._with_choices(config.maker_draft_ai)} → {self._with_choices(config.maker_ai)}"
+        else:
+            resume = f"one prompt: {self._with_choices(config.maker_ai)}"
+        return f"resume {resume}; cover letter: {self._with_choices(config.maker_letter_ai)}"
 
     def _read(self) -> None:
         if self.proc is None:
