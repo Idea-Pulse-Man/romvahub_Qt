@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget,
@@ -77,6 +78,10 @@ class ResumeMakerPage(QWidget):
             box.addWidget(label(title, "Muted"))
             counts.addLayout(box)
         counts.addStretch(1)
+        # The Word and PDF files are copies on the server, made from each Resume's JSON (see storage.py).
+        counts.addWidget(button("Make files…", "", self._make_files,
+                                "Make the Resume and cover letter files on the server for a date range and statuses"),
+                         0, Qt.AlignBottom)
         control.body.addLayout(counts)
         left.addWidget(control)
 
@@ -314,6 +319,10 @@ class ResumeMakerPage(QWidget):
             return
         self.agent_dir.setText(f"Folder: {self.maker.agent_dir or '(not found)'}")
         self.node.setText(f"Node.js: {node_path() or 'not found — install it from nodejs.org'}")
+
+    def _make_files(self) -> None:
+        from .storage import make_files
+        make_files(self, self.state)
 
     def _toggle(self) -> None:
         self.problem.hide()

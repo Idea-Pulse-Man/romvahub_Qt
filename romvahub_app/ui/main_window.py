@@ -19,13 +19,14 @@ from .home import HomePage
 from .profiles import ProfilesPage
 from .resume_maker import ResumeMakerPage
 from .settings import SettingsPage
+from .storage import StoragePage
 from .icons import icon, pixmap
 from .widgets import Banner, Dot, app_icon, brand_mark, button, icon_button, label
 
 # Admin pages, all inside the app: (key, menu text, icon, page class).
 ADMIN_PAGES = [("users", "Users", "users", UsersPage), ("tokens", "Tokens", "key", TokensPage),
                ("ai", "AI settings", "sparkles", AiSettingsPage), ("pipeline", "Pipeline", "kanban", PipelinePage),
-               ("calendar", "Calendar", "calendar", CalendarPage)]
+               ("calendar", "Calendar", "calendar", CalendarPage), ("storage", "Storage", "file", StoragePage)]
 
 
 class MainWindow(QMainWindow):
