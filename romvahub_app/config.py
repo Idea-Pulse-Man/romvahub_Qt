@@ -21,6 +21,15 @@ DEFAULT_SERVER = "https://www.romva.space"
 PAGE_SIZES = (5, 10, 25, 50, 100)
 DEFAULT_PAGE_SIZE = 5
 AI_SITES = (("chatgpt", "ChatGPT", "chatgpt.com"), ("claude", "Claude", "claude.ai"), ("gemini", "Gemini", "gemini.google.com"))
+# ChatGPT's Chat / Work mode, the models its model menu lists in each (2026-11-26; any other name can be
+# typed), and the thinking effort. The Resume agent chooses them in every chat (resume_agent chat.js).
+CHATGPT_MODES = (("chat", "Chat"), ("work", "Work"))
+CHATGPT_MODELS = {
+    "chat": ("GPT-6", "GPT-6.2", "GPT-5.6 Sol"),
+    "work": ("GPT-6 Sol", "GPT-6.2 Sol", "GPT-6.2 Astra", "GPT-6.1 Sol", "GPT-6.1 Terra", "GPT-6 Astra", "GPT-6 Luna",
+             "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "Default"),
+}
+CHATGPT_EFFORTS = (("low", "Low"), ("medium", "Medium"), ("high", "High"))
 
 
 def _settings() -> QSettings:
@@ -134,6 +143,31 @@ class Config:
     @maker_ai.setter
     def maker_ai(self, value: str) -> None:
         _set("maker_ai", value)
+
+    # ChatGPT's mode, model (one per mode: the two list different models) and thinking effort.
+    @property
+    def chatgpt_mode(self) -> str:
+        value = str(_get("chatgpt_mode", "chat"))
+        return value if value in CHATGPT_MODELS else "chat"
+
+    @chatgpt_mode.setter
+    def chatgpt_mode(self, value: str) -> None:
+        _set("chatgpt_mode", value)
+
+    def chatgpt_model(self, mode: str) -> str:
+        return str(_get(f"chatgpt_model_{mode}", CHATGPT_MODELS.get(mode, CHATGPT_MODELS["chat"])[0])).strip()
+
+    def set_chatgpt_model(self, mode: str, value: str) -> None:
+        _set(f"chatgpt_model_{mode}", value.strip())
+
+    @property
+    def chatgpt_effort(self) -> str:
+        value = str(_get("chatgpt_effort", "high"))
+        return value if value in [e[0] for e in CHATGPT_EFFORTS] else "high"
+
+    @chatgpt_effort.setter
+    def chatgpt_effort(self, value: str) -> None:
+        _set("chatgpt_effort", value)
 
     @property
     def maker_autostart(self) -> bool:

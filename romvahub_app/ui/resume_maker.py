@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QPlainTextEdit, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from ..config import AI_SITES, bundled_agent_dir, config
+from ..config import AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, bundled_agent_dir, config
 from ..maker import Maker, node_path
 from ..state import AppState
 from .resume_actions import ResumeCheckCard
@@ -85,6 +85,43 @@ class ResumeMakerPage(QWidget):
         ai.body.addWidget(self.ai)
         ai.body.addWidget(label("The work happens in a small Chrome window that uses your own account on that site. "
                                 "Sign in there once.", "Muted", wrap=True))
+        # ChatGPT only: Chat / Work, the model and the thinking effort, chosen in every chat.
+        self.chatgpt_box = QWidget()
+        gpt = QVBoxLayout(self.chatgpt_box)
+        gpt.setContentsMargins(0, 4, 0, 0)
+        gpt.setSpacing(8)
+        mode_row = QHBoxLayout()
+        mode_row.addWidget(self._row_label("ChatGPT mode", "Label"))
+        self.chatgpt_mode = Segmented(list(CHATGPT_MODES), config.chatgpt_mode)
+        self.chatgpt_mode.changed.connect(self._pick_chatgpt_mode)
+        mode_row.addWidget(self.chatgpt_mode)
+        mode_row.addStretch(1)
+        gpt.addLayout(mode_row)
+        model_row = QHBoxLayout()
+        model_row.addWidget(self._row_label("Model", "Label"))
+        self.chatgpt_model = QComboBox()
+        self.chatgpt_model.setEditable(True)
+        self.chatgpt_model.setInsertPolicy(QComboBox.NoInsert)
+        self.chatgpt_model.setMinimumWidth(220)
+        self.chatgpt_model.setToolTip("The model as ChatGPT's model menu names it. Another name can be typed in.")
+        self.chatgpt_model.currentTextChanged.connect(
+            lambda text: config.set_chatgpt_model(config.chatgpt_mode, text) if not self._filling_models else None)
+        model_row.addWidget(self.chatgpt_model)
+        model_row.addStretch(1)
+        gpt.addLayout(model_row)
+        effort_row = QHBoxLayout()
+        effort_row.addWidget(self._row_label("Effort", "Label"))
+        self.chatgpt_effort = Segmented(list(CHATGPT_EFFORTS), config.chatgpt_effort)
+        self.chatgpt_effort.changed.connect(lambda key: setattr(config, "chatgpt_effort", key))
+        effort_row.addWidget(self.chatgpt_effort)
+        effort_row.addStretch(1)
+        gpt.addLayout(effort_row)
+        self.chatgpt_note = label("", "Muted", wrap=True)
+        gpt.addWidget(self.chatgpt_note)
+        ai.body.addWidget(self.chatgpt_box)
+        self._filling_models = False
+        self._fill_models()
+
         self.profile_row = QHBoxLayout()
         self.profile_row.addWidget(label("Make for", "Label"))
         self.profile_pick = QComboBox()
@@ -204,6 +241,7 @@ class ResumeMakerPage(QWidget):
         self.made.setText(str(self.maker.made_today))
         self.failed.setText(str(self.maker.failed_today))
         self.ai.setEnabled(not running)
+        self.chatgpt_box.setEnabled(not running)
         self.profile_pick.setEnabled(not running)
         job = self.maker.job
         if job:
@@ -244,8 +282,37 @@ class ResumeMakerPage(QWidget):
 
         DocViewer(self.state, bid, kind, self).exec()
 
+    @staticmethod
+    def _row_label(text: str, kind: str):
+        lab = label(text, kind)
+        lab.setMinimumWidth(96)
+        return lab
+
     def _pick_ai(self, key: str) -> None:
         config.maker_ai = key
+        self.chatgpt_box.setVisible(key == "chatgpt")
+
+    def _pick_chatgpt_mode(self, key: str) -> None:
+        config.chatgpt_mode = key
+        self._fill_models()
+
+    def _fill_models(self) -> None:
+        """The models of the chosen mode, with the one saved for it (a typed-in name too)."""
+        mode = config.chatgpt_mode
+        saved = config.chatgpt_model(mode)
+        self._filling_models = True
+        try:
+            self.chatgpt_model.clear()
+            self.chatgpt_model.addItems(list(CHATGPT_MODELS[mode]))
+            self.chatgpt_model.setCurrentText(saved)
+        finally:
+            self._filling_models = False
+        self.chatgpt_box.setVisible(config.maker_ai == "chatgpt")
+        self.chatgpt_note.setText(
+            "Work chats are ordinary chats and stay in your ChatGPT history (ChatGPT has no Work mode in a "
+            "temporary chat), and Work mode has no Web search switch. A model without the effort chosen gets the "
+            "nearest level below it." if mode == "work" else
+            "Temporary chats, with Web search on. Chat mode has no Low: Low uses Instant.")
 
     def _choose_dir(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "The resume_agent folder", self.maker.agent_dir or "")

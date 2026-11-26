@@ -134,6 +134,9 @@ class Maker(QObject):
         env.insert("ROMVA_TOKEN", token)
         env.insert("ROMVA_API_URL", config.server_url)
         env.insert("ROMVA_AI", config.maker_ai)
+        env.insert("ROMVA_CHATGPT_MODE", config.chatgpt_mode)
+        env.insert("ROMVA_CHATGPT_MODEL", config.chatgpt_model(config.chatgpt_mode))
+        env.insert("ROMVA_CHATGPT_EFFORT", config.chatgpt_effort)
         env.insert("ROMVA_AGENT_HOME", str(data_dir() / "agent"))
         if renewable:
             env.insert("ROMVA_TOKEN_STDIN", "1")
@@ -153,7 +156,7 @@ class Maker(QObject):
         proc.start(node_path(), [str(agent / "src" / "agent.js")])
         if renewable:
             self._renew.start()
-        self._emit_line("INFO", f"Resume Maker started ({self.ai_name()})")
+        self._emit_line("INFO", f"Resume Maker started ({self.ai_details()})")
         self.state_changed.emit(True)
 
     def stop(self) -> None:
@@ -215,6 +218,14 @@ class Maker(QObject):
         from .config import AI_SITES
 
         return next((name for key, name, _ in AI_SITES if key == config.maker_ai), "ChatGPT")
+
+    def ai_details(self) -> str:
+        """The AI website, and for ChatGPT its mode, model and effort: "ChatGPT · Work · GPT-6 Sol · High"."""
+        if config.maker_ai != "chatgpt":
+            return self.ai_name()
+        mode = config.chatgpt_mode
+        return " · ".join(part for part in (self.ai_name(), mode.capitalize(), config.chatgpt_model(mode),
+                                            config.chatgpt_effort.capitalize()) if part)
 
     def _read(self) -> None:
         if self.proc is None:
