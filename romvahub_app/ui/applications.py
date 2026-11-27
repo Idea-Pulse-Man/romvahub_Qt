@@ -499,12 +499,51 @@ class ApplicationsPage(QWidget):
         else:
             if job and str(job.number) == str(bid.get("number")) and bid.get("status") == "Draft":
                 lay.addWidget(self._state_label("spinner", "Making…", c["accent"], c["accent"], True))
+            elif bid.get("autoMakeRequested"):
+                up = self._state_label("clock", "Up next", c["accent"], c["accent"])
+                up.setToolTip("Asked for with Make: made before every other application.")
+                lay.addWidget(up)
             elif self.maker.running and bid.get("status") == "Draft" and not bid.get("hasResume"):
                 lay.addWidget(self._state_label("clock", "In queue", c["muted"], c["muted"]))
+            elif bid.get("status") != "Skip" and (bid.get("jobDescription") or "").strip():
+                # Make: the Resume and letter (or the letter, when the Resume is there), now.
+                make = button("Make", "Ghost", lambda _=False, b=bid: self._make(b),
+                              "Make the Resume and cover letter now" if not bid.get("hasResume") else "Make the cover letter now")
+                make.setStyleSheet(f"QPushButton {{ color: {c['accent']}; font-weight: 600; }}")
+                lay.addWidget(make)
             else:
                 lay.addWidget(label("—", "Faint"))
         lay.addStretch(1)
         return box
+
+    def _make(self, bid: dict) -> None:
+        """Make: in "Chrome + Romva Apply" mode this computer makes it now (its Romva Apply picks it up within
+        half a minute, even without Start); otherwise it goes first in the queue. The server refuses a Romva Apply
+        token for another Profile than the application's, and says what to do."""
+        from .. import browser
+
+        body: dict = {}
+        if config.maker_engine == "browser":
+            if not browser.extension_installed():
+                QMessageBox.information(self, "Make", "Add Romva Apply to the app's Chrome first: Settings → "
+                                                      "Add Romva Apply…, then paste your Profile's token in it.")
+                return
+            body["worker"] = browser.worker_name()
+
+        def done(_r) -> None:
+            bid["autoMakeRequested"] = True
+            self._refresh_doc_cells()
+            # Romva Apply runs inside the app's Chrome: it must be open to make it.
+            if body and not browser.is_running():
+                browser.open_urls(f"{config.server_url}/applications")
+
+        def failed(error) -> None:
+            QMessageBox.warning(self, "Make", f"{bid.get('company', 'This application')}: {getattr(error, 'message', error)}")
+
+        tasks.run(lambda: self.state.api.request("POST", f"/api/auto-make/jobs/{bid['id']}/request",
+                                                 json_body=body or None,
+                                                 profile_id=resume_actions.bid_profile(self.state, bid)),
+                  done, failed, owner=self)
 
     def _refresh_doc_cells(self) -> None:
         if not self._col:
