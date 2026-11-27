@@ -229,8 +229,11 @@ class UsersPage(_Page):
 
     def _selection(self) -> None:
         user = self._current()
-        for btn in (self.edit_btn, self.history_btn):
-            btn.setEnabled(bool(user))
+        # The Super Admin's account is changed by the Super Admin only (the server says so too).
+        locked = bool(user) and bool(user.get("superAdmin")) and not self.state.session.is_super_admin
+        self.edit_btn.setEnabled(bool(user) and not locked)
+        self.edit_btn.setToolTip("Only the Super Admin can change this account." if locked else "")
+        self.history_btn.setEnabled(bool(user))
         self.profiles_btn.setEnabled(bool(user) and user.get("role") != "admin")
         self.profiles_btn.setToolTip("Admins work on every Profile." if user and user.get("role") == "admin"
                                      else "Which Profiles this user works on")
@@ -326,7 +329,7 @@ class UsersPage(_Page):
 
     def _edit(self) -> None:
         user = self._current()
-        if user:
+        if user and self.edit_btn.isEnabled():
             self._user_form(user)
 
     def _toggle_suspend(self) -> None:
