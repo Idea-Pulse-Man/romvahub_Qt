@@ -137,7 +137,9 @@ class PartLine:
 
 
 class StartWindow(QDialog):
-    def __init__(self, state: AppState, parent: QWidget | None = None):
+    def __init__(self, state: AppState, parent: QWidget | None = None, token_profile_id: str | None = None):
+        """`token_profile_id`: the Profile of the token in this computer's Romva Apply, when the server knows it —
+        the only one offered (it is the only one that computer can make Resumes for)."""
         super().__init__(parent)
         self.state = state
         self.setWindowTitle("Start resume")
@@ -150,15 +152,26 @@ class StartWindow(QDialog):
         form = QFormLayout()
         form.setVerticalSpacing(10)
 
-        # Profile: one.
+        # Profile: one — the token's in Romva Apply when known, and only if this account may use it.
         self.profile = QComboBox()
-        for p in state.profiles:
-            if not p.get("revoked"):
+        self.token_problem = ""
+        mine = [p for p in state.profiles if not p.get("revoked")]
+        if token_profile_id:
+            match = next((p for p in mine if p.get("id") == token_profile_id), None)
+            if match:
+                self.profile.addItem(f"{match.get('name') or 'Profile'}  (the Profile of the token in Romva Apply)",
+                                     match.get("id"))
+            else:
+                self.token_problem = ("The token in Romva Apply in the app's Chrome is for a Profile your account can't "
+                                      "use. Paste the token of one of your Profiles in Romva Apply.")
+            self.profile.setEnabled(False)
+        else:
+            for p in mine:
                 self.profile.addItem(p.get("name") or "Profile", p.get("id"))
-        wanted = config.start_profile or (state.profile_id if state.profile_id != ALL else None)
-        index = self.profile.findData(wanted) if wanted else -1
-        if index >= 0:
-            self.profile.setCurrentIndex(index)
+            wanted = config.start_profile or (state.profile_id if state.profile_id != ALL else None)
+            index = self.profile.findData(wanted) if wanted else -1
+            if index >= 0:
+                self.profile.setCurrentIndex(index)
         form.addRow("Profile", self.profile)
 
         # Order and start No.
@@ -196,6 +209,10 @@ class StartWindow(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Start")
         buttons.button(QDialogButtonBox.Ok).setObjectName("Primary")
+        if self.token_problem:
+            self.error.setText(self.token_problem)
+            self.error.show()
+            buttons.button(QDialogButtonBox.Ok).setEnabled(False)
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         lay.addWidget(buttons)

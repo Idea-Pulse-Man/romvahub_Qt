@@ -388,10 +388,28 @@ class ResumeMakerPage(QWidget):
             return
         if self._browser_mode() and not self._chrome_ready():
             return
-        # The Start window: one Profile, Up / Down and the start No., the method and the AIs.
+        if not self._browser_mode():
+            self._open_start_window(None)
+            return
+        # The Profile of the token in this Chrome's Romva Apply, as the server noted it at the last ask for work:
+        # the only Profile this computer can make Resumes for.
+        from .. import browser
+
+        worker = browser.worker_name()
+
+        def found(rows) -> None:
+            row = next((r for r in (rows or []) if isinstance(r, dict) and r.get("worker") == worker), None)
+            self._open_start_window((row or {}).get("tokenProfileId"))
+
+        tasks.run(lambda: self.state.api.request("GET", "/api/auto-make/computers",
+                                                 profile_id=self._token_profile(config.start_profile)),
+                  found, lambda _e: self._open_start_window(None), owner=self)
+
+    def _open_start_window(self, token_profile_id: str | None) -> None:
+        # The Start window: one Profile, Up / Down and the start No., and the Resume's and cover letter's AIs.
         from .start_window import StartWindow
 
-        window = StartWindow(self.state, self)
+        window = StartWindow(self.state, self, token_profile_id=token_profile_id)
         if window.exec() != QDialog.Accepted:
             return
         body = window.choice()
