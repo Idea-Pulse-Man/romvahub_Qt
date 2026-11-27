@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 from .. import tasks
 
 from ..config import (
-    AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, MAKER_METHODS, bundled_agent_dir, config,
+    AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, CLAUDE_MODELS, MAKER_METHODS, bundled_agent_dir, config,
 )
 from ..maker import Maker, node_path
 from ..state import AppState
@@ -172,7 +172,33 @@ class ResumeMakerPage(QWidget):
         ds.addWidget(label("DeepSeek has no model menu: these two switches are its choice, set in every chat.",
                            "Muted", wrap=True))
         ai.body.addWidget(self.deepseek_box)
-        # Claude and Gemini (when used): their default model, for now.
+        # Claude (when it is used): the model and Extended thinking, set by Romva Apply in every chat.
+        self.claude_box = QWidget()
+        cl = QVBoxLayout(self.claude_box)
+        cl.setContentsMargins(0, 4, 0, 0)
+        cl.setSpacing(6)
+        cl.addWidget(label("Claude", "Label"))
+        cl_row = QHBoxLayout()
+        cl_row.addWidget(self._row_label("Model", "Label"))
+        self.claude_model = QComboBox()
+        self.claude_model.setEditable(True)
+        self.claude_model.setInsertPolicy(QComboBox.NoInsert)
+        self.claude_model.setMinimumWidth(220)
+        self.claude_model.addItems(list(CLAUDE_MODELS))
+        self.claude_model.setCurrentText(config.claude_model)
+        self.claude_model.setToolTip("The model as Claude's model menu names it. Another name can be typed in.")
+        self.claude_model.currentTextChanged.connect(lambda text: setattr(config, "claude_model", text or CLAUDE_MODELS[0]))
+        cl_row.addWidget(self.claude_model)
+        self.claude_thinking = QCheckBox("Extended thinking")
+        self.claude_thinking.setChecked(config.claude_thinking)
+        self.claude_thinking.toggled.connect(lambda on: setattr(config, "claude_thinking", on))
+        cl_row.addWidget(self.claude_thinking)
+        cl_row.addStretch(1)
+        cl.addLayout(cl_row)
+        cl.addWidget(label("Set in claude.ai by Romva Apply (Resume Maker runs in Chrome + Romva Apply). "
+                           "The Resume agent uses Claude's default model.", "Muted", wrap=True))
+        ai.body.addWidget(self.claude_box)
+        # Gemini (when used): its default model, for now.
         self.default_model_note = label("", "Muted", wrap=True)
         ai.body.addWidget(self.default_model_note)
         self._filling_models = False
@@ -311,7 +337,7 @@ class ResumeMakerPage(QWidget):
         self.toggle_btn.style().polish(self.toggle_btn)
         self.made.setText(str(self.maker.made_today))
         self.failed.setText(str(self.maker.failed_today))
-        for widget in (self.ai_rows, self.chatgpt_box, self.deepseek_box):
+        for widget in (self.ai_rows, self.chatgpt_box, self.deepseek_box, self.claude_box):
             widget.setEnabled(not running)
         self.profile_pick.setEnabled(not running)
         job = self.maker.job
@@ -483,7 +509,8 @@ class ResumeMakerPage(QWidget):
         used = config.maker_ais_used()
         self.chatgpt_box.setVisible("chatgpt" in used)
         self.deepseek_box.setVisible("deepseek" in used)
-        others = [self.maker.site_name(key) for key in ("claude", "gemini") if key in used]
+        self.claude_box.setVisible("claude" in used)
+        others = [self.maker.site_name(key) for key in ("gemini",) if key in used]
         self.default_model_note.setText(
             f"{' and '.join(others)}: {'their' if len(others) > 1 else 'its'} default model (no model choice yet)."
             if others else "")

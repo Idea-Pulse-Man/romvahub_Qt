@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit, QVBoxLayout, QWidget,
 )
 
-from ..config import AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, config
+from ..config import AI_SITES, CHATGPT_EFFORTS, CHATGPT_MODELS, CHATGPT_MODES, CLAUDE_MODELS, config
 from ..state import ALL, AppState
 from .widgets import Segmented, label
 
@@ -105,6 +105,23 @@ class StartWindow(QDialog):
         ds.addWidget(self.search)
         ds.addStretch(1)
         form.addRow("DeepSeek", self.deepseek_box)
+        # Claude's model and Extended thinking (Romva Apply sets them in claude.ai); Gemini: its own default.
+        self.claude_box = QWidget()
+        cl = QHBoxLayout(self.claude_box)
+        cl.setContentsMargins(0, 0, 0, 0)
+        self.claude_model = QComboBox()
+        self.claude_model.setEditable(True)
+        self.claude_model.addItems(list(CLAUDE_MODELS))
+        self.claude_model.setCurrentText(config.claude_model)
+        self.claude_model.setToolTip("The model as Claude's model menu names it. Another name can be typed in.")
+        self.claude_thinking = QCheckBox("Extended thinking")
+        self.claude_thinking.setChecked(config.claude_thinking)
+        cl.addWidget(self.claude_model, 1)
+        cl.addWidget(self.claude_thinking)
+        form.addRow("Claude", self.claude_box)
+        self.gemini_note = label("Uses the model set on gemini.google.com (no model choice yet).", "Muted", wrap=True)
+        form.addRow("Gemini", self.gemini_note)
+        self.form = form
         lay.addLayout(form)
 
         self.error = label("", "Error", wrap=True)
@@ -155,10 +172,23 @@ class StartWindow(QDialog):
             used.add("deepseek")
         return used
 
+    def _used_for(self, site: str) -> str:
+        """What an AI writes here: "the draft", "the Resume and the cover letter"…"""
+        parts = (["the draft"] if self._method() == "two" and site == "deepseek" else []) + \
+                (["the Resume"] if self.ai.currentData() == site else []) + \
+                (["the cover letter"] if self.letter_ai.currentData() == site else [])
+        return f"{', '.join(parts[:-1])} and {parts[-1]}" if len(parts) > 1 else (parts[0] if parts else "")
+
     def _show_options(self) -> None:
+        """Only the AIs in use, each saying what it writes (a ChatGPT row kept for the letter is not the Resume's)."""
         used = self._used()
-        self.chatgpt_box.setEnabled("chatgpt" in used)
-        self.deepseek_box.setEnabled("deepseek" in used)
+        for site, name, widget in (("chatgpt", "ChatGPT", self.chatgpt_box), ("claude", "Claude", self.claude_box),
+                                   ("gemini", "Gemini", self.gemini_note), ("deepseek", "DeepSeek", self.deepseek_box)):
+            self.form.setRowVisible(widget, site in used)
+            row_label = self.form.labelForField(widget)
+            if site in used and row_label is not None:
+                row_label.setText(f"{name}<br><span style='color:#9AA3B2; font-size:11px'>for {self._used_for(site)}</span>")
+        self.adjustSize()
 
     def _note(self) -> None:
         down = (self.order.current or "up") == "down"
@@ -185,6 +215,8 @@ class StartWindow(QDialog):
         config.chatgpt_effort = self.effort.currentData() or "high"
         config.deepseek_deepthink = self.deepthink.isChecked()
         config.deepseek_search = self.search.isChecked()
+        config.claude_model = self.claude_model.currentText() or CLAUDE_MODELS[0]
+        config.claude_thinking = self.claude_thinking.isChecked()
         self.accept()
 
     def choice(self) -> dict:

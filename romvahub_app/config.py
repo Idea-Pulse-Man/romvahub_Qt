@@ -33,6 +33,9 @@ CHATGPT_MODELS = {
              "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "Default"),
 }
 CHATGPT_EFFORTS = (("low", "Low"), ("medium", "Medium"), ("high", "High"))
+# Claude's models as its model menu names them (2026-11-27; another name can be typed). Romva Apply (3.6.1+)
+# sets the model and Extended thinking in every chat; when a version is gone, the same family is taken.
+CLAUDE_MODELS = ("Opus 5.5", "Sonnet 5.5", "Haiku 5.5", "Fable 5.2")
 
 
 def _settings() -> QSettings:
@@ -284,12 +287,30 @@ class Config:
     def deepseek_search(self, value: bool) -> None:
         _set("deepseek_search", bool(value))
 
+    # Claude: its model and Extended thinking (set by Romva Apply; the Resume agent uses Claude's default).
+    @property
+    def claude_model(self) -> str:
+        return str(_get("claude_model", CLAUDE_MODELS[0])).strip() or CLAUDE_MODELS[0]
+
+    @claude_model.setter
+    def claude_model(self, value: str) -> None:
+        _set("claude_model", value.strip())
+
+    @property
+    def claude_thinking(self) -> bool:
+        return _get("claude_thinking", True)
+
+    @claude_thinking.setter
+    def claude_thinking(self, value: bool) -> None:
+        _set("claude_thinking", bool(value))
+
     def maker_models(self) -> dict:
-        """Each AI's own choices, for the Resume agent (its config.json "models")."""
+        """Each AI's own choices, for the Resume agent (its config.json "models") and the server (Start)."""
         mode = self.chatgpt_mode
         return {
             "chatgpt": {"mode": mode, "model": self.chatgpt_model(mode), "effort": self.chatgpt_effort},
             "deepseek": {"deepThink": self.deepseek_deepthink, "search": self.deepseek_search},
+            "claude": {"model": self.claude_model, "thinking": self.claude_thinking},
         }
 
     # ChatGPT's mode, model (one per mode: the two list different models) and thinking effort.
