@@ -304,6 +304,19 @@ class Config:
     def claude_thinking(self, value: bool) -> None:
         _set("claude_thinking", bool(value))
 
+    # The Start window's two lines (Resume, cover letter): each line's AI and every AI's settings on it.
+    @property
+    def start_parts(self) -> dict:
+        try:
+            value = json.loads(str(_get("start_parts", "") or "{}"))
+        except ValueError:
+            value = {}
+        return value if isinstance(value, dict) else {}
+
+    @start_parts.setter
+    def start_parts(self, value: dict) -> None:
+        _set("start_parts", json.dumps(value))
+
     def maker_models(self) -> dict:
         """Each AI's own choices, for the Resume agent (its config.json "models") and the server (Start)."""
         mode = self.chatgpt_mode
