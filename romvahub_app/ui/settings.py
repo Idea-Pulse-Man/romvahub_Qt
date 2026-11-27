@@ -137,10 +137,104 @@ class SettingsPage(QWidget):
                                     "installed there and signed in.", "Muted", wrap=True))
         lay.addWidget(system)
 
+        # The app's own Chrome: where you bid, and where Resumes are made (browser.py).
+        own = Card("The app's Chrome (bidding and Resumes)")
+        own.body.addWidget(label("A Chrome of the app's own, with its own sign-ins, Romva Apply in it, and your proxy. "
+                                 "Once Romva Apply is added there, Apply opens jobs in it.", "Muted", wrap=True))
+        self.own_state = label("", "", wrap=True)
+        own.body.addWidget(self.own_state)
+        row = QHBoxLayout()
+        row.addWidget(button("Open Chrome", "Primary", self._open_own_chrome))
+        row.addWidget(button("Restart Chrome", "", self._restart_own_chrome, "A new Romva Apply or proxy takes effect"))
+        row.addWidget(button("Add Romva Apply…", "", self._add_extension, "Once: Developer mode -> Load unpacked"))
+        row.addStretch(1)
+        own.body.addLayout(row)
+        engine_row = QHBoxLayout()
+        engine_row.addWidget(label("Resume Maker runs in", ""), 1)
+        self.engine = Segmented([("agent", "This app (Resume agent)"), ("browser", "Chrome + Romva Apply")],
+                                config.maker_engine)
+        self.engine.changed.connect(lambda key: self._saved(setattr(config, "maker_engine", key)))
+        engine_row.addWidget(self.engine)
+        own.body.addLayout(engine_row)
+        own.body.addWidget(label("Proxy (for example your SmartProxy gateway). Empty: no proxy.", "Label"))
+        proxy = QHBoxLayout()
+        self.proxy_host = QLineEdit(config.proxy_host)
+        self.proxy_host.setPlaceholderText("Host, e.g. gate.smartproxy.com")
+        self.proxy_port = QLineEdit(config.proxy_port)
+        self.proxy_port.setPlaceholderText("Port")
+        self.proxy_port.setMaximumWidth(90)
+        self.proxy_user = QLineEdit(config.proxy_user)
+        self.proxy_user.setPlaceholderText("Username")
+        self.proxy_pass = QLineEdit(config.proxy_password)
+        self.proxy_pass.setPlaceholderText("Password")
+        self.proxy_pass.setEchoMode(QLineEdit.Password)
+        for field, stretch in ((self.proxy_host, 3), (self.proxy_port, 1), (self.proxy_user, 2), (self.proxy_pass, 2)):
+            proxy.addWidget(field, stretch)
+        own.body.addLayout(proxy)
+        self.proxy_bypass = QLineEdit(config.proxy_bypass)
+        self.proxy_bypass.setPlaceholderText("Sites that skip the proxy, separated by ; (none unless you add them)")
+        own.body.addWidget(self.proxy_bypass)
+        save_row = QHBoxLayout()
+        save_row.addStretch(1)
+        save_row.addWidget(button("Save proxy", "", self._save_proxy, "Then Restart Chrome"))
+        own.body.addLayout(save_row)
+        lay.addWidget(own)
+        self._show_own_chrome()
+
         about = Card("About")
         about.body.addWidget(label(f"romva hub {APP_VERSION}", ""))
         lay.addWidget(about)
         lay.addStretch(1)
+
+    # ------------------------------------------------------------------ the app's Chrome
+    def _show_own_chrome(self) -> None:
+        from .. import browser
+
+        installed = browser.extension_installed()
+        self.own_state.setText(
+            f"Romva Apply {browser.version_text()} in {browser.extension_dir()}  ·  "
+            + ("added to the app's Chrome" if installed else "not added to the app's Chrome yet: click “Add Romva Apply…”")
+            + f"  ·  this computer: {browser.worker_name()}")
+
+    def _open_own_chrome(self) -> None:
+        from .. import browser
+
+        if not browser.open_urls(f"{config.server_url}/applications"):
+            QMessageBox.warning(self, "Chrome", "Chrome was not found. Choose it under “This computer”.")
+        self._show_own_chrome()
+
+    def _restart_own_chrome(self) -> None:
+        from .. import browser
+
+        browser.sync_extension()
+        if not browser.restart():
+            QMessageBox.warning(self, "Chrome", "Chrome was not found. Choose it under “This computer”.")
+        self._show_own_chrome()
+
+    def _add_extension(self) -> None:
+        from .. import browser
+
+        browser.sync_extension()
+        browser.write_configs()
+        if not browser.open_urls("chrome://extensions/"):
+            QMessageBox.warning(self, "Chrome", "Chrome was not found. Choose it under “This computer”.")
+            return
+        QMessageBox.information(self, "Add Romva Apply", browser.install_steps())
+        self._show_own_chrome()
+
+    def _save_proxy(self) -> None:
+        from .. import browser
+
+        config.proxy_host = self.proxy_host.text()
+        config.proxy_port = self.proxy_port.text()
+        config.proxy_user = self.proxy_user.text()
+        config.proxy_password = self.proxy_pass.text()
+        config.proxy_bypass = self.proxy_bypass.text()
+        browser.write_configs()
+        self._saved()
+        if browser.is_running() and QMessageBox.question(
+                self, "Proxy", "Restart the app's Chrome now, so the proxy takes effect?") == QMessageBox.Yes:
+            browser.restart()
 
     # ------------------------------------------------------------------ actions
     def _saved(self, _=None) -> None:

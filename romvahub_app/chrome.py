@@ -29,6 +29,14 @@ def find_chrome() -> str:
 
 
 def open_url(url: str) -> None:
+    # The app's own Chrome (browser.py) once Romva Apply is in it: that is where the bidder bids.
+    from . import browser
+
+    try:
+        if browser.extension_installed() and browser.open_urls(url):
+            return
+    except OSError:
+        pass
     chrome = find_chrome()
     if chrome:
         try:

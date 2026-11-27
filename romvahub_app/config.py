@@ -125,6 +125,67 @@ class Config:
     def chrome_path(self, value: str) -> None:
         _set("chrome_path", value)
 
+    # The app's own Chrome (browser.py): its proxy, and where the Resume Maker runs.
+    @property
+    def proxy_host(self) -> str:
+        return str(_get("proxy_host", "")).strip()
+
+    @proxy_host.setter
+    def proxy_host(self, value: str) -> None:
+        _set("proxy_host", value.strip())
+
+    @property
+    def proxy_port(self) -> str:
+        return str(_get("proxy_port", "")).strip()
+
+    @proxy_port.setter
+    def proxy_port(self, value: str) -> None:
+        _set("proxy_port", value.strip())
+
+    @property
+    def proxy_user(self) -> str:
+        return str(_get("proxy_user", "")).strip()
+
+    @proxy_user.setter
+    def proxy_user(self, value: str) -> None:
+        _set("proxy_user", value.strip())
+
+    @property
+    def proxy_password(self) -> str:
+        """Kept in Windows Credential Manager, not in the settings."""
+        from . import vault
+
+        return vault.get("proxy", "chrome") or ""
+
+    @proxy_password.setter
+    def proxy_password(self, value: str) -> None:
+        from . import vault
+
+        if value:
+            vault.put("proxy", "chrome", value)
+        else:
+            vault.delete("proxy", "chrome")
+
+    @property
+    def proxy_bypass(self) -> str:
+        """Sites that skip the proxy ("chatgpt.com; *.deepseek.com"): none unless the bidder adds them."""
+        return str(_get("proxy_bypass", ""))
+
+    @proxy_bypass.setter
+    def proxy_bypass(self, value: str) -> None:
+        _set("proxy_bypass", value)
+
+    @property
+    def maker_engine(self) -> str:
+        """Where the Resume Maker runs: "agent" (the Resume agent in this app) or "browser"
+        (the app's Chrome with Romva Apply, steps from romva.space's make engine)."""
+        value = str(_get("maker_engine", "agent"))
+        return value if value in ("agent", "browser") else "agent"
+
+    @maker_engine.setter
+    def maker_engine(self, value: str) -> None:
+        _set("maker_engine", value)
+
     # The Resume Maker.
     @property
     def agent_dir(self) -> str:

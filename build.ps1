@@ -55,6 +55,18 @@ try {
     Pop-Location
 }
 
+# Romva Apply (../altv) built in: the app copies it into its own Chrome's extension folder and keeps it up to date.
+$altvSource = Join-Path $PSScriptRoot '..\altv'
+if (Test-Path (Join-Path $altvSource 'manifest.json')) {
+    $altvOut = Join-Path $PSScriptRoot 'dist\RomvaHub\altv'
+    if (Test-Path $altvOut) { Remove-Item $altvOut -Recurse -Force }
+    New-Item -ItemType Directory -Force $altvOut | Out-Null
+    Get-ChildItem $altvSource -Force | Where-Object { $_.Name -notin '.git', '.gitignore' -and $_.Extension -ne '.md' } |
+        Copy-Item -Destination $altvOut -Recurse -Force
+} else {
+    Write-Host '     (Romva Apply was not found next to the app: built without it)'
+}
+
 Write-Host '4/4  dist\RomvaHub.zip'
 $zip = Join-Path $PSScriptRoot 'dist\RomvaHub.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }

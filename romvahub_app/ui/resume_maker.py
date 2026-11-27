@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout, QMessageBox, QPlainTextEdit, QScrollArea, QVBoxLayout,
@@ -253,6 +253,12 @@ class ResumeMakerPage(QWidget):
         cols.addLayout(right, 2)
         lay.addLayout(cols)
 
+        # In Chrome mode (Settings): this computer's state on romva.space, every 15 seconds.
+        self._browser_running = False
+        self._browser_note = ""
+        self._browser_timer = QTimer(self)
+        self._browser_timer.timeout.connect(self._poll_browser)
+        self._browser_timer.start(15_000)
         maker.state_changed.connect(lambda _r: self._show())
         maker.job_changed.connect(lambda _j: self._show())
         maker.line.connect(self._add_line)
@@ -284,13 +290,21 @@ class ResumeMakerPage(QWidget):
         )
 
     def _show(self) -> None:
-        running = self.maker.running
-        self.dot.set_color("#22C55E" if running else "#9AA3B2")
-        self.status.setText("Running" if running else "Stopped")
-        self.status_note.setText(
-            f"Working through your Drafts with {self.maker.ai_name()}. You can close this window; it keeps going in the tray."
-            if running else "Press Start to make the resumes for your Drafts."
-        )
+        if self._browser_mode():
+            running = self._browser_running
+            self.dot.set_color("#22C55E" if running else "#9AA3B2")
+            self.status.setText("Running in Chrome" if running else "Stopped")
+            self.status_note.setText(
+                (self._browser_note or "Romva Apply makes the resumes in the app's Chrome, one chat at a time.")
+                if running else "Press Start to make the resumes in the app's Chrome (Romva Apply).")
+        else:
+            running = self.maker.running
+            self.dot.set_color("#22C55E" if running else "#9AA3B2")
+            self.status.setText("Running" if running else "Stopped")
+            self.status_note.setText(
+                f"Working through your Drafts with {self.maker.ai_name()}. You can close this window; it keeps going in the tray."
+                if running else "Press Start to make the resumes for your Drafts."
+            )
         self.toggle_btn.setText("■  Stop" if running else "▶  Start")
         self.toggle_btn.setObjectName("" if running else "Primary")
         self.toggle_btn.style().unpolish(self.toggle_btn)
@@ -330,15 +344,23 @@ class ResumeMakerPage(QWidget):
         from .storage import make_files
         make_files(self, self.state)
 
+    def _browser_mode(self) -> bool:
+        """The Resume Maker runs in the app's Chrome with Romva Apply (Settings), not in the Resume agent."""
+        return config.maker_engine == "browser"
+
     def _toggle(self) -> None:
         self.problem.hide()
-        if self.maker.running:
-            self.maker.stop()
+        running = self._browser_running if self._browser_mode() else self.maker.running
+        if running:
+            if not self._browser_mode():
+                self.maker.stop()
             # This computer stops on the server too (its row in maker_computers).
             body = {"running": False, "profileId": config.start_profile, "order": config.start_order}
             tasks.run(lambda: self.state.api.request("PUT", self._computer_path(), json_body=body,
                                                      profile_id=self._token_profile(config.start_profile)),
-                      None, lambda _e: None, owner=self)
+                      lambda _row: self._set_browser_running(False), lambda _e: None, owner=self)
+            return
+        if self._browser_mode() and not self._chrome_ready():
             return
         # The Start window: one Profile, Up / Down and the start No., the method and the AIs.
         from .start_window import StartWindow
@@ -350,7 +372,10 @@ class ResumeMakerPage(QWidget):
         profile = self._token_profile(body["profileId"])
 
         def saved(_row) -> None:
-            self.maker.start(profile)
+            if self._browser_mode():
+                self._set_browser_running(True)
+            else:
+                self.maker.start(profile)
 
         def failed(error) -> None:
             self.problem.setText(f"Could not start: {getattr(error, 'message', error)}")
@@ -359,13 +384,52 @@ class ResumeMakerPage(QWidget):
         tasks.run(lambda: self.state.api.request("PUT", self._computer_path(), json_body=body, profile_id=profile),
                   saved, failed, owner=self)
 
-    @staticmethod
-    def _computer_path() -> str:
+    def _chrome_ready(self) -> bool:
+        """The app's Chrome, with Romva Apply in it, open: else what to do, and False."""
+        from .. import browser
+
+        browser.sync_extension()
+        browser.write_configs()
+        if not browser.extension_installed():
+            browser.open_urls("chrome://extensions/")
+            QMessageBox.information(self, "Add Romva Apply", browser.install_steps()
+                                    + "\n\nThen sign in to ChatGPT (and DeepSeek, Claude or Gemini, if you use them) "
+                                      "in that Chrome window, paste your Romva token in Romva Apply, and press Start again.")
+            return False
+        if not browser.is_running():
+            browser.open_urls(f"{config.server_url}/applications")
+        return True
+
+    def _set_browser_running(self, running: bool) -> None:
+        self._browser_running = running
+        self._show()
+
+    def _poll_browser(self) -> None:
+        """This computer's Resume maker in Chrome, as romva.space has it: running, online, and why it waits."""
+        if not self._browser_mode() or not self.isVisible():
+            return
+        from .. import browser
+
+        def shown(rows) -> None:
+            row = next((r for r in rows or [] if r.get("worker") == browser.worker_name()), None)
+            self._browser_running = bool(row and row.get("running"))
+            note = ((row or {}).get("status") or {}).get("note") or ""
+            self._browser_note = ("Chrome is " + ("online" if row and row.get("online") else "not answering")
+                                  + (f" — {note}" if note else "")) if row else ""
+            self._show()
+
+        tasks.run(lambda: self.state.api.request("GET", "/api/auto-make/computers",
+                                                 profile_id=self._token_profile(config.start_profile)),
+                  shown, lambda _e: None, owner=self)
+
+    def _computer_path(self) -> str:
         from urllib.parse import quote
 
+        from .. import browser
         from ..maker import worker_name
 
-        return f"/api/auto-make/computers/{quote(worker_name(), safe='')}"
+        name = browser.worker_name() if self._browser_mode() else worker_name()
+        return f"/api/auto-make/computers/{quote(name, safe='')}"
 
     def _token_profile(self, profile_id: str | None) -> str | None:
         """Token mode: the Profile whose token signs the request (and runs the agent)."""
