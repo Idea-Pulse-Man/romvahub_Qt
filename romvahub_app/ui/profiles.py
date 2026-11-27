@@ -658,21 +658,58 @@ class ProfileEditor(QWidget):
         return page
 
     def _prompts(self) -> QWidget:
+        """The template and the prompts. The Resume prompt comes in two styles: One step (one prompt), and Two
+        steps (Step 1: the information the Resume needs, as JSON; Step 2: the Resume from it). The Start window's
+        Method says which is used, and needs that style's prompts."""
         page, body = _tab_page()
+        # Which style can make Resumes, from what is in the boxes now.
+        self.prompts_ready = label("", "Muted", wrap=True)
+        body.addWidget(self.prompts_ready)
         card, lay = _section("Template", "The Word template the resume is made from.", "file")
         self.template = QComboBox()
         lay.addWidget(_field("Resume template", self.template))
         body.addWidget(card)
-        card, lay = _section("Prompts", "What the AI is asked. Empty = the default from AI settings.", "sparkles")
+        card, lay = _section("Resume prompt — One step",
+                             "One AI writes the Resume as JSON with this prompt. The job's company, role and "
+                             "description are added after it.", "sparkles")
         self.resume_prompt = QPlainTextEdit()
         self.resume_prompt.setMinimumHeight(220)
-        lay.addWidget(_field("Resume prompt", self.resume_prompt))
+        lay.addWidget(_field("Resume prompt", self.resume_prompt, note="Required for One step."))
+        body.addWidget(card)
+        card, lay = _section("Resume prompts — Two steps",
+                             "Step 1's AI reads the job and answers with the information the Resume needs (company, "
+                             "role, experience) as JSON. Step 2's AI writes the Resume JSON from the job and that "
+                             "answer, which it gets under \"STEP 1 ANSWER\".", "sparkles")
+        self.step1_prompt = QPlainTextEdit()
+        self.step1_prompt.setMinimumHeight(180)
+        lay.addWidget(_field("Step 1 prompt — the information", self.step1_prompt))
+        self.step2_prompt = QPlainTextEdit()
+        self.step2_prompt.setMinimumHeight(180)
+        lay.addWidget(_field("Step 2 prompt — the Resume", self.step2_prompt, note="Both required for Two steps."))
+        body.addWidget(card)
+        card, lay = _section("Cover letter prompt", "The letter's rules. The job and the new Resume are added after it.",
+                             "sparkles")
         self.cover_prompt = QPlainTextEdit()
         self.cover_prompt.setMinimumHeight(160)
-        lay.addWidget(_field("Cover letter prompt", self.cover_prompt, note="Empty = no cover letter."))
+        lay.addWidget(_field("Cover letter prompt", self.cover_prompt, note="Empty = the simple built-in prompt."))
         body.addWidget(card)
         body.addStretch(1)
+        for box in (self.resume_prompt, self.step1_prompt, self.step2_prompt):
+            box.textChanged.connect(self._show_prompts_ready)
+        self.template.currentIndexChanged.connect(lambda _i: self._show_prompts_ready())
         return page
+
+    def _show_prompts_ready(self) -> None:
+        """One step: ready / needs …; Two steps: ready / needs … — from the boxes and the template now."""
+        filled = lambda box: bool(box.toPlainText().strip())  # noqa: E731
+        template = str(self.template.currentData() or "")
+        own = [] if template and template.lower() != "default.docx" else ["the profile's own Resume template"]
+        styles = [("One step", ([] if filled(self.resume_prompt) else ["a Resume prompt"]) + own),
+                  ("Two steps", ([] if filled(self.step1_prompt) else ["a Step 1 prompt"])
+                   + ([] if filled(self.step2_prompt) else ["a Step 2 prompt"]) + own)]
+        self.prompts_ready.setText("   ·   ".join(
+            f"{name}: {'ready ✓' if not missing else 'needs ' + ' and '.join(missing)}" for name, missing in styles)
+            + "   (the Start window's Method chooses which one makes the Resumes)")
 
     def _avoid(self) -> QWidget:
         page, body = _tab_page()
@@ -777,7 +814,10 @@ class ProfileEditor(QWidget):
         if index >= 0:
             self.template.setCurrentIndex(index)
         self.resume_prompt.setPlainText(prompts.get("resumePrompt") or "")
+        self.step1_prompt.setPlainText(prompts.get("resumeStep1Prompt") or "")
+        self.step2_prompt.setPlainText(prompts.get("resumeStep2Prompt") or "")
         self.cover_prompt.setPlainText(prompts.get("coverLetterPrompt") or "")
+        self._show_prompts_ready()
         self.avoid_roles.setPlainText("\n".join((avoid or {}).get("avoidRoles", [])))
         self.avoid_companies.setPlainText("\n".join((avoid or {}).get("avoidCompanies", [])))
 
@@ -807,6 +847,8 @@ class ProfileEditor(QWidget):
             return
         api, pid, admin = self.state.api, self.pid, self.admin
         prompts = {"resumePrompt": self.resume_prompt.toPlainText().strip() or None,
+                   "resumeStep1Prompt": self.step1_prompt.toPlainText().strip() or None,
+                   "resumeStep2Prompt": self.step2_prompt.toPlainText().strip() or None,
                    "coverLetterPrompt": self.cover_prompt.toPlainText().strip() or None}
         if self.template.currentData():
             prompts["resumeTemplateId"] = self.template.currentData()

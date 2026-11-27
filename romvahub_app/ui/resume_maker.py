@@ -398,18 +398,21 @@ class ResumeMakerPage(QWidget):
         worker = browser.worker_name()
 
         def found(rows) -> None:
-            row = next((r for r in (rows or []) if isinstance(r, dict) and r.get("worker") == worker), None)
-            self._open_start_window((row or {}).get("tokenProfileId"))
+            row = next((r for r in (rows or []) if isinstance(r, dict) and r.get("worker") == worker), None) or {}
+            status = row.get("status") or {}
+            # Why romva.space stopped it (its Profile had no prompts for the Method), shown in the window.
+            stop_note = str(status.get("note") or "") if status.get("stopped") and not row.get("running") else ""
+            self._open_start_window(row.get("tokenProfileId"), stop_note)
 
         tasks.run(lambda: self.state.api.request("GET", "/api/auto-make/computers",
                                                  profile_id=self._token_profile(config.start_profile)),
                   found, lambda _e: self._open_start_window(None), owner=self)
 
-    def _open_start_window(self, token_profile_id: str | None) -> None:
-        # The Start window: one Profile, Up / Down and the start No., and the Resume's and cover letter's AIs.
+    def _open_start_window(self, token_profile_id: str | None, stop_note: str = "") -> None:
+        # The Start window: one Profile, Up / Down and the start No., the Method, and each line's AI.
         from .start_window import StartWindow
 
-        window = StartWindow(self.state, self, token_profile_id=token_profile_id)
+        window = StartWindow(self.state, self, token_profile_id=token_profile_id, stop_note=stop_note)
         if window.exec() != QDialog.Accepted:
             return
         body = window.choice()
@@ -457,7 +460,11 @@ class ResumeMakerPage(QWidget):
         def shown(rows) -> None:
             row = next((r for r in rows or [] if r.get("worker") == browser.worker_name()), None)
             self._browser_running = bool(row and row.get("running"))
-            note = ((row or {}).get("status") or {}).get("note") or ""
+            status = (row or {}).get("status") or {}
+            note = status.get("note") or ""
+            # Stopped by romva.space: its Profile has no prompts for the Start window's Method.
+            if note and status.get("stopped") and not self._browser_running:
+                note = f"stopped by romva.space: {note}"
             self._browser_note = ("Chrome is " + ("online" if row and row.get("online") else "not answering")
                                   + (f" — {note}" if note else "")) if row else ""
             self._show()
